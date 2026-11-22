@@ -37,4 +37,23 @@ same false
 copy readonly false field
 bag true false false true
 stored true true
+init untouched 0 0
+init header true false 7 script
+init missing true
+init stacked stacked false
+obj script|||script||false|true
+obj variable|health||field||false|true
+obj variable|stacked||stacked||false|true
+obj function|ping||function||false|true
+obj parameter|greet|who|parameter||false|true
+init find 6 6 5 5
+init row script||false
+init row field||false
+init row stacked||false
+init row |1|false
+init row function||false
+init row parameter||false
+obj variable|host_value||host||false|true
+obj variable|grand_value||grand||false|true
+init untouched 0 0
 tracked 0 0 tracked

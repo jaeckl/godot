@@ -74,9 +74,43 @@ func test() -> void:
 	var stored: Dictionary = script.get_annotations()["script"][0]
 	print("stored ", typeof(stored) == TYPE_DICTIONARY, " ", typeof(stored["values"]) == TYPE_DICTIONARY)
 
+	print("init untouched ", UserAnnotationTracked.init_calls, " ", UserAnnotationTracked.setter_calls)
+	var header_obj: UserAnnotation = AnnotationUtils.get_annotation_initialized(script, UserAnnotationBase)
+	print("init header ", header_obj is UserAnnotation, " ", header_obj is GDScriptAnnotation, " ", header_obj.from_base, " ", header_obj.label)
+	print("init missing ", AnnotationUtils.get_annotation_initialized(script, UserAnnotationBase, "missing") == null)
+	var stacked_obj: UserAnnotation = AnnotationUtils.get_annotation_initialized(script, UserAnnotationBase, "stacked")
+	var stacked_again: UserAnnotation = AnnotationUtils.get_annotation_initialized(script, UserAnnotationBase, "stacked")
+	print("init stacked ", stacked_obj.label, " ", is_same(stacked_obj, stacked_again))
+
+	AnnotationUtils.for_each_annotation_initialized(UserAnnotation, script, _on_obj)
+	var found_obj: Array = AnnotationUtils.find_annotated_initialized(script, UserAnnotationBase)
+	print("init find ", found.size(), " ", found_obj.size(), " ", AnnotationUtils.find_annotated(script, UserAnnotation).size(), " ", AnnotationUtils.find_annotated_initialized(script, UserAnnotation).size())
+	for row in found_obj:
+		_print_obj("init row ", row)
+	AnnotationUtils.for_each_annotation_in_bases_initialized(UserAnnotation, UserAnnotationChild, _on_obj)
+	print("init untouched ", UserAnnotationTracked.init_calls, " ", UserAnnotationTracked.setter_calls)
+
 	var tracked_entry: Dictionary = AnnotationUtils.get_annotation(script, UserAnnotationTracked, "tracked")
 	var tracked_obj: UserAnnotationTracked = AnnotationUtils.instantiate_annotation(tracked_entry)
 	print("tracked ", UserAnnotationTracked.init_calls, " ", UserAnnotationTracked.setter_calls, " ", tracked_obj.label)
+
+func _on_obj(obj: Variant, context: Dictionary) -> void:
+	var label := ""
+	var extra := ""
+	if obj is UserAnnotation:
+		label = obj.label
+	elif obj is UserAnnotationAlso:
+		extra = str(obj.extra)
+	print("obj ", context["target"], "|", context["member"], "|", context["parameter"], "|", label, "|", extra, "|", obj is GDScriptAnnotation, "|", obj is UserAnnotation)
+
+func _print_obj(prefix: String, obj: Variant) -> void:
+	var label := ""
+	var extra := ""
+	if obj is UserAnnotation:
+		label = obj.label
+	elif obj is UserAnnotationAlso:
+		extra = str(obj.extra)
+	print(prefix, label, "|", extra, "|", obj is GDScriptAnnotation)
 
 func _show_instance(tag: String, entry: Dictionary) -> void:
 	var created: UserAnnotation = AnnotationUtils.instantiate_annotation(entry)
