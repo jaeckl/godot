@@ -7,4 +7,6 @@ extends GDScriptAnnotation
 # script, and copies my_dict into the member store. It does not call _init
 # or a setter. Applying @MyCustomAnnotation still does neither.
 # `my_dict` defaults to an empty dictionary when a use does not pass it.
+# `const repeatable := true` would allow another @MyCustomAnnotation on the
+# same target. Without it, a second use is an error. There is no @repeatable.
 var my_dict: Dictionary = {}

@@ -89,6 +89,8 @@ class GDScriptAnalyzer {
 	bool _annotation_use_stack_has(const String &p_fqcn) const;
 	void _report_annotation_cycle(const GDScriptParser::Node *p_source) const;
 	void _collect_annotation_attributes(GDScriptParser::ClassNode *p_class, Vector<AnnotationAttribute> &r_attributes, bool p_report_local_errors, HashSet<const GDScriptParser::ClassNode *> &p_seen);
+	void _check_local_repeatable_const(GDScriptParser::ClassNode *p_class);
+	bool _annotation_is_repeatable(GDScriptParser::ClassNode *p_class, bool &r_valid);
 	GDScriptParser::ClassNode *_find_annotation_class(const StringName &p_class_name, GDScriptParser::ClassNode *p_current, const GDScriptParser::Node *p_source);
 	bool _coerce_annotation_value(const GDScriptParser::DataType &p_type, Variant &r_value, const GDScriptParser::Node *p_source, const String &p_annotation_name, const String &p_attribute_name);
 	bool _fold_annotation_argument(GDScriptParser::ExpressionNode *p_expression, const GDScriptParser::DataType &p_type, Variant &r_value, const String &p_annotation_name, const String &p_attribute_label);

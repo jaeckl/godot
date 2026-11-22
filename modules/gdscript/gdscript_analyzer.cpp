@@ -1378,6 +1378,7 @@ void GDScriptAnalyzer::resolve_class_interface(GDScriptParser::ClassNode *p_clas
 			Vector<AnnotationAttribute> schema;
 			HashSet<const GDScriptParser::ClassNode *> seen;
 			_collect_annotation_attributes(p_class, schema, true, seen);
+			_check_local_repeatable_const(p_class);
 		}
 		_resolve_class_user_annotations(p_class);
 		parser->current_class = previous_user_class;
@@ -6740,6 +6741,63 @@ void GDScriptAnalyzer::_report_annotation_cycle(const GDScriptParser::Node *p_so
 	}
 }
 
+void GDScriptAnalyzer::_check_local_repeatable_const(GDScriptParser::ClassNode *p_class) {
+	if (p_class == nullptr || !p_class->has_member(SNAME("repeatable"))) {
+		return;
+	}
+	const GDScriptParser::ClassNode::Member member = p_class->get_member(SNAME("repeatable"));
+	if (member.type != GDScriptParser::ClassNode::Member::CONSTANT || member.constant == nullptr) {
+		return;
+	}
+	const GDScriptParser::ExpressionNode *initializer = member.constant->initializer;
+	if (initializer != nullptr && initializer->is_constant && initializer->reduced_value.get_type() == Variant::BOOL) {
+		return;
+	}
+	push_error(R"(Annotation const "repeatable" must be a constant bool.)", member.constant);
+}
+
+bool GDScriptAnalyzer::_annotation_is_repeatable(GDScriptParser::ClassNode *p_class, bool &r_valid) {
+	r_valid = true;
+	bool present = false;
+	bool value = false;
+	HashSet<const GDScriptParser::ClassNode *> seen;
+	List<GDScriptParser::ClassNode *> chain;
+	GDScriptParser::ClassNode *current = p_class;
+	while (current != nullptr && !seen.has(current)) {
+		seen.insert(current);
+		chain.push_front(current);
+		if (current->base_type.kind == GDScriptParser::DataType::CLASS && current->base_type.class_type != nullptr) {
+			current = current->base_type.class_type;
+		} else {
+			current = nullptr;
+		}
+	}
+
+	for (GDScriptParser::ClassNode *klass : chain) {
+		if (!klass->interface_members_ready && !klass->resolving_members) {
+			resolve_class_interface(klass, p_class);
+		}
+		if (!klass->has_member(SNAME("repeatable"))) {
+			continue;
+		}
+		const GDScriptParser::ClassNode::Member member = klass->get_member(SNAME("repeatable"));
+		if (member.type != GDScriptParser::ClassNode::Member::CONSTANT || member.constant == nullptr) {
+			continue;
+		}
+		const GDScriptParser::ExpressionNode *initializer = member.constant->initializer;
+		present = true;
+		if (initializer != nullptr && initializer->is_constant && initializer->reduced_value.get_type() == Variant::BOOL) {
+			r_valid = true;
+			value = initializer->reduced_value;
+		} else {
+			r_valid = false;
+			value = false;
+		}
+	}
+
+	return r_valid && present && value;
+}
+
 void GDScriptAnalyzer::_collect_annotation_attributes(GDScriptParser::ClassNode *p_class, Vector<AnnotationAttribute> &r_attributes, bool p_report_local_errors, HashSet<const GDScriptParser::ClassNode *> &p_seen) {
 	if (p_class == nullptr || p_seen.has(p_class)) {
 		return;
@@ -6955,13 +7013,19 @@ void GDScriptAnalyzer::_resolve_user_annotation(GDScriptParser::AnnotationNode *
 		return;
 	}
 	const StringName class_name = raw_name.substr(1);
-	if (r_seen.has(class_name)) {
-		push_error(vformat(R"(Annotation "@%s" can only be used once per target.)", class_name), p_annotation);
+	GDScriptParser::ClassNode *target = _find_annotation_class(class_name, p_current, p_annotation);
+	if (target == nullptr) {
 		return;
 	}
 
-	GDScriptParser::ClassNode *target = _find_annotation_class(class_name, p_current, p_annotation);
-	if (target == nullptr) {
+	bool repeatable_valid = true;
+	const bool repeatable = _annotation_is_repeatable(target, repeatable_valid);
+	if (!repeatable_valid) {
+		push_error(R"(Annotation const "repeatable" must be a constant bool.)", p_annotation);
+		return;
+	}
+	if (r_seen.has(class_name) && !repeatable) {
+		push_error(vformat(R"(Annotation "@%s" can only be used once per target.)", class_name), p_annotation);
 		return;
 	}
 
