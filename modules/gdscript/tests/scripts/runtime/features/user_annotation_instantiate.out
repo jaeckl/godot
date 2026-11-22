@@ -1,0 +1,40 @@
+GDTEST_OK
+each script|||UserAnnotation|script|
+each variable|health||UserAnnotation|field|
+each variable|stacked||UserAnnotation|stacked|
+each function|ping||UserAnnotation|function|
+each parameter|greet|who|UserAnnotation|parameter|
+base query
+each script|||UserAnnotation|script|
+each variable|health||UserAnnotation|field|
+each variable|stacked||UserAnnotation|stacked|
+each variable|stacked||UserAnnotationAlso||1
+each function|ping||UserAnnotation|function|
+each parameter|greet|who|UserAnnotation|parameter|
+header UserAnnotation script false
+has header true
+has missing false
+has members only false
+has host member true
+stacked base UserAnnotation
+stacked exact UserAnnotation
+find script||
+find variable|health|
+find variable|stacked|
+find variable|stacked|
+find function|ping|
+find parameter|greet|who
+child each done
+each variable|host_value||UserAnnotation|host|
+each variable|grand_value||UserAnnotation|grand|
+each variable|host_value||UserAnnotation|host|
+host each done
+new script true false 7 
+new field true false 7 field
+new function true false 7 
+new parameter true false 7 
+same false
+copy readonly false field
+bag true false false true
+stored true true
+tracked 0 0 tracked

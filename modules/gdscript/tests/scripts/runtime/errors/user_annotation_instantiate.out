@@ -1,0 +1,28 @@
+GDTEST_RUNTIME_ERROR
+not a dictionary
+>> ERROR: Method/function failed. Returning: Variant()
+>>   Annotation entry must be a Dictionary with "name" and "values".
+unknown
+>> ERROR: Method/function failed. Returning: Variant()
+>>   Unknown annotation class "NoSuchAnnotation".
+native
+>> ERROR: Method/function failed. Returning: Variant()
+>>   Annotation class "Node" must be a GDScript class.
+not annotation
+>> ERROR: Method/function failed. Returning: Variant()
+>>   Annotation class "UserAnnotationPlain" must extend "GDScriptAnnotation".
+bad attribute
+>> ERROR: Method/function failed. Returning: Variant()
+>>   Annotation "UserAnnotation" has no attribute "not_an_attribute".
+bad type
+>> ERROR: Method/function failed. Returning: Variant()
+>>   Invalid type for annotation attribute "from_base".
+bad class arg
+>> ERROR: Method/function failed.
+>>   Annotation class must be a GDScript or a global class name.
+bad callback
+>> ERROR: Method/function failed.
+>>   Annotation callback is not callable.
+bad parameter
+>> ERROR: Method/function failed. Returning: Variant()
+>>   Annotation parameter lookup requires a member name.
