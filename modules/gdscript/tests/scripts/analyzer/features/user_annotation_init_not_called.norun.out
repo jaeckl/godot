@@ -1,0 +1,3 @@
+GDTEST_OK
+~~ WARNING at line 4: (ANNOTATION_ATTRIBUTE_ACCESSOR) Annotation attribute getter/setter is not called.
+~~ WARNING at line 10: (ANNOTATION_INIT_NOT_CALLED) `_init` is not called for annotations.

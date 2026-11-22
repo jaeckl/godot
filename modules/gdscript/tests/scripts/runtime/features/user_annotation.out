@@ -1,0 +1,9 @@
+GDTEST_OK
+script UserAnnotation script 7 0
+field field 7 asda true
+static static
+positional 9 positional q
+function function true
+parameter parameter
+inner inner
+exported true

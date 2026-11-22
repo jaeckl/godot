@@ -1,0 +1,2 @@
+GDTEST_ANALYZER_ERROR
+>> ERROR at line 3: Argument "label" of annotation "@UserAnnotation" isn't a constant expression.
