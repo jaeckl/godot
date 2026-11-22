@@ -31,6 +31,7 @@
 #include "register_types.h"
 
 #include "annotation_utils.h"
+#include "reflection_utils.h"
 #include "gdscript.h"
 #include "gdscript_annotation.h"
 #include "gdscript_cache.h"
@@ -142,6 +143,11 @@ void initialize_gdscript_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(GDScript);
 		GDREGISTER_ABSTRACT_CLASS(GDScriptAnnotation);
 		GDREGISTER_ABSTRACT_CLASS(AnnotationUtils);
+		GDREGISTER_CLASS(ScriptInfo);
+		GDREGISTER_CLASS(VariableInfo);
+		GDREGISTER_CLASS(FunctionInfo);
+		GDREGISTER_CLASS(ParameterInfo);
+		GDREGISTER_ABSTRACT_CLASS(ReflectionUtils);
 		GDREGISTER_INTERNAL_CLASS(GDScriptFunctionState);
 
 		script_language_gd = memnew(GDScriptLanguage);

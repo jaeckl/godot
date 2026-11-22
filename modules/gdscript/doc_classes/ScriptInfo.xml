@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="ScriptInfo" inherits="RefCounted" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Read-only view of one GDScript.
+	</brief_description>
+	<description>
+		Built by [ReflectionUtils] from the script passed to it. No setters.
+	</description>
+	<members>
+		<member name="gdscript" type="GDScript" setter="" getter="get_gdscript">
+			The script this view describes.
+		</member>
+	</members>
+</class>

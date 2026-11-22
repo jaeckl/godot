@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="ReflectionUtils" inherits="Object" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Read-only views of GDScript methods and properties.
+	</brief_description>
+	<description>
+		Maps [MethodInfo] and [PropertyInfo] from [method GDScript.get_script_method_list], [method GDScript.get_script_property_list], and [method GDScript.get_method_info] into [ScriptInfo], [VariableInfo], [FunctionInfo], and [ParameterInfo]. Those Godot records stay dictionaries. This class does not run when a script loads.
+		[method GDScript.get_script_property_list] does not include static variables. [method get_variable_info] still returns one when the script stores a static [PropertyInfo] under that name.
+	</description>
+	<methods>
+		<method name="get_function_info" qualifiers="static">
+			<return type="FunctionInfo" />
+			<param index="0" name="script" type="GDScript" />
+			<param index="1" name="name" type="StringName" />
+			<description>
+				Returns the [FunctionInfo] for [param name], searching [param script] and its GDScript bases, or [code]null[/code].
+			</description>
+		</method>
+		<method name="get_function_list" qualifiers="static">
+			<return type="Array" />
+			<param index="0" name="script" type="GDScript" />
+			<description>
+				Returns a [FunctionInfo] for each method on [param script] and its GDScript bases. [member FunctionInfo.gdscript] is the script that declares the method.
+			</description>
+		</method>
+		<method name="get_parameter_info" qualifiers="static">
+			<return type="ParameterInfo" />
+			<param index="0" name="script" type="GDScript" />
+			<param index="1" name="function" type="StringName" />
+			<param index="2" name="parameter" type="StringName" />
+			<description>
+				Returns the [ParameterInfo] for one argument of [param function], or [code]null[/code].
+			</description>
+		</method>
+		<method name="get_parameter_list" qualifiers="static">
+			<return type="Array" />
+			<param index="0" name="script" type="GDScript" />
+			<param index="1" name="function" type="StringName" />
+			<description>
+				Returns a [ParameterInfo] for each argument of [param function], in declaration order. Empty when the function is missing.
+			</description>
+		</method>
+		<method name="get_script_info" qualifiers="static">
+			<return type="ScriptInfo" />
+			<param index="0" name="script" type="GDScript" />
+			<description>
+				Returns a [ScriptInfo] for [param script].
+			</description>
+		</method>
+		<method name="get_variable_info" qualifiers="static">
+			<return type="VariableInfo" />
+			<param index="0" name="script" type="GDScript" />
+			<param index="1" name="name" type="StringName" />
+			<description>
+				Returns the [VariableInfo] for [param name], searching [param script] and its GDScript bases, or [code]null[/code]. Includes a static variable stored on that script.
+			</description>
+		</method>
+		<method name="get_variable_list" qualifiers="static">
+			<return type="Array" />
+			<param index="0" name="script" type="GDScript" />
+			<description>
+				Returns a [VariableInfo] for each property and static variable on [param script] and its GDScript bases. [member VariableInfo.gdscript] is the script that declares the variable.
+			</description>
+		</method>
+	</methods>
+</class>

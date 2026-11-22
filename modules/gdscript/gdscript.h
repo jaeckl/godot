@@ -74,6 +74,7 @@ class GDScript : public Script {
 	friend class GDScriptAnalyzer;
 	friend class GDScriptCompiler;
 	friend class AnnotationUtils;
+	friend class ReflectionUtils;
 	friend class GDScriptDocGen;
 	friend class GDScriptLambdaCallable;
 	friend class GDScriptLambdaSelfCallable;

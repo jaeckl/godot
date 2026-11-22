@@ -30,6 +30,7 @@
 
 #include "annotation_utils.h"
 
+#include "reflection_utils.h"
 #include "core/object/class_db.h"
 #include "gdscript.h"
 #include "gdscript_cache.h"
@@ -151,19 +152,32 @@ static bool _resolve_entry_class(const StringName &p_class_name, HashMap<StringN
 	return true;
 }
 
-static Dictionary _context(const StringName &p_target, const StringName &p_member, const StringName &p_parameter) {
-	Dictionary context;
-	context["target"] = String(p_target);
-	context["member"] = String(p_member);
-	context["parameter"] = String(p_parameter);
-	return context;
+enum AnnotationPlace {
+	PLACE_SCRIPT,
+	PLACE_VARIABLE,
+	PLACE_FUNCTION,
+	PLACE_PARAMETER,
+};
+
+static Variant _reflection_target(const GDScript *p_script, AnnotationPlace p_place, const StringName &p_member, const StringName &p_parameter) {
+	Ref<GDScript> script(p_script);
+	switch (p_place) {
+		case PLACE_SCRIPT:
+			return ReflectionUtils::get_script_info(script);
+		case PLACE_VARIABLE:
+			return ReflectionUtils::get_variable_info(script, p_member);
+		case PLACE_FUNCTION:
+			return ReflectionUtils::get_function_info(script, p_member);
+		case PLACE_PARAMETER:
+			return ReflectionUtils::get_parameter_info(script, p_member, p_parameter);
+	}
+	return Variant();
 }
 
-static bool _call_annotation_callback(const Callable &p_callback, const StringName &p_name, const Dictionary &p_values, const Dictionary &p_context, String &r_error) {
+static bool _call_annotation_callback(const Callable &p_callback, const StringName &p_name, const Dictionary &p_values, const Variant &p_target, String &r_error) {
 	const Variant name = p_name;
 	const Variant values = p_values;
-	const Variant context = p_context;
-	const Variant *args[3] = { &name, &values, &context };
+	const Variant *args[3] = { &name, &values, &p_target };
 	Callable::CallError call_error;
 	Variant return_value;
 	p_callback.callp(args, 3, return_value, call_error);
@@ -174,9 +188,8 @@ static bool _call_annotation_callback(const Callable &p_callback, const StringNa
 	return true;
 }
 
-static bool _call_initialized_callback(const Callable &p_callback, const Variant &p_object, const Dictionary &p_context, String &r_error) {
-	const Variant context = p_context;
-	const Variant *args[2] = { &p_object, &context };
+static bool _call_initialized_callback(const Callable &p_callback, const Variant &p_object, const Variant &p_target, String &r_error) {
+	const Variant *args[2] = { &p_object, &p_target };
 	Callable::CallError call_error;
 	Variant return_value;
 	p_callback.callp(args, 2, return_value, call_error);
@@ -187,7 +200,7 @@ static bool _call_initialized_callback(const Callable &p_callback, const Variant
 	return true;
 }
 
-static bool _each_entries(const Array &p_entries, const StringName &p_target, const StringName &p_member, const StringName &p_parameter, const GDScript *p_query, const Callable *p_callback, Array *r_found, bool p_instantiate, HashMap<StringName, AnnotationClass> &r_cache, String &r_error) {
+static bool _each_entries(const Array &p_entries, const GDScript *p_script, AnnotationPlace p_place, const StringName &p_member, const StringName &p_parameter, const GDScript *p_query, const Callable *p_callback, Array *r_found, bool p_instantiate, HashMap<StringName, AnnotationClass> &r_cache, String &r_error) {
 	for (int i = 0; i < p_entries.size(); i++) {
 		Dictionary entry = p_entries[i];
 		StringName entry_name = entry["name"];
@@ -198,7 +211,15 @@ static bool _each_entries(const Array &p_entries, const StringName &p_target, co
 		if (!_annotation_class_matches(entry_class.script.ptr(), p_query)) {
 			continue;
 		}
-		Dictionary context = _context(p_target, p_member, p_parameter);
+		const bool need_target = p_callback != nullptr || !p_instantiate;
+		Variant target;
+		if (need_target) {
+			target = _reflection_target(p_script, p_place, p_member, p_parameter);
+			if (target.get_type() != Variant::OBJECT) {
+				r_error = "Annotation reflection target is missing.";
+				return false;
+			}
+		}
 		Variant object;
 		if (p_instantiate) {
 			Dictionary entry_copy;
@@ -212,16 +233,16 @@ static bool _each_entries(const Array &p_entries, const StringName &p_target, co
 			}
 		}
 		if (r_found != nullptr) {
-			r_found->push_back(p_instantiate ? object : Variant(context));
+			r_found->push_back(p_instantiate ? object : Variant(target));
 		}
 		if (p_callback == nullptr) {
 			continue;
 		}
 		if (p_instantiate) {
-			if (!_call_initialized_callback(*p_callback, object, context, r_error)) {
+			if (!_call_initialized_callback(*p_callback, object, target, r_error)) {
 				return false;
 			}
-		} else if (!_call_annotation_callback(*p_callback, entry_name, entry["values"], context, r_error)) {
+		} else if (!_call_annotation_callback(*p_callback, entry_name, entry["values"], target, r_error)) {
 			return false;
 		}
 	}
@@ -242,7 +263,7 @@ static bool _walk_script(const GDScript *p_script, const GDScript *p_query, cons
 	if (annotations.has("script")) {
 		Array entries;
 		if (_as_array(annotations["script"], entries)) {
-			if (!_each_entries(entries, "script", StringName(), StringName(), p_query, p_callback, r_found, p_instantiate, r_cache, r_error)) {
+			if (!_each_entries(entries, p_script, PLACE_SCRIPT, StringName(), StringName(), p_query, p_callback, r_found, p_instantiate, r_cache, r_error)) {
 				return false;
 			}
 		}
@@ -257,7 +278,7 @@ static bool _walk_script(const GDScript *p_script, const GDScript *p_query, cons
 			if (!_as_array(variables[member], entries)) {
 				continue;
 			}
-			if (!_each_entries(entries, "variable", member, StringName(), p_query, p_callback, r_found, p_instantiate, r_cache, r_error)) {
+			if (!_each_entries(entries, p_script, PLACE_VARIABLE, member, StringName(), p_query, p_callback, r_found, p_instantiate, r_cache, r_error)) {
 				return false;
 			}
 		}
@@ -272,7 +293,7 @@ static bool _walk_script(const GDScript *p_script, const GDScript *p_query, cons
 			if (!_as_array(functions[member], entries)) {
 				continue;
 			}
-			if (!_each_entries(entries, "function", member, StringName(), p_query, p_callback, r_found, p_instantiate, r_cache, r_error)) {
+			if (!_each_entries(entries, p_script, PLACE_FUNCTION, member, StringName(), p_query, p_callback, r_found, p_instantiate, r_cache, r_error)) {
 				return false;
 			}
 		}
@@ -291,7 +312,7 @@ static bool _walk_script(const GDScript *p_script, const GDScript *p_query, cons
 				if (!_as_array(parameter_map[parameter], entries)) {
 					continue;
 				}
-				if (!_each_entries(entries, "parameter", function_name, parameter, p_query, p_callback, r_found, p_instantiate, r_cache, r_error)) {
+				if (!_each_entries(entries, p_script, PLACE_PARAMETER, function_name, parameter, p_query, p_callback, r_found, p_instantiate, r_cache, r_error)) {
 					return false;
 				}
 			}

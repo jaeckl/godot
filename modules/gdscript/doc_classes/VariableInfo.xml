@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="VariableInfo" inherits="RefCounted" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Read-only view of one GDScript variable.
+	</brief_description>
+	<description>
+		Built by [ReflectionUtils] from a [PropertyInfo] on the declaring script. No setters. [code]static[/code] is not a property name because it is a GDScript keyword; read [member is_static].
+	</description>
+	<members>
+		<member name="exported" type="bool" setter="" getter="is_exported" default="false">
+			[code]true[/code] when the property usage includes storage or editor.
+		</member>
+		<member name="is_static" type="bool" setter="" getter="get_is_static" default="false">
+			[code]true[/code] when the variable is a static variable on [member gdscript].
+		</member>
+		<member name="name" type="StringName" setter="" getter="get_name" default="&amp;&quot;&quot;">
+			The variable name.
+		</member>
+		<member name="gdscript" type="GDScript" setter="" getter="get_gdscript">
+			The script that declares the variable.
+		</member>
+		<member name="type" type="int" setter="" getter="get_type" default="0">
+			The [enum Variant.Type] from the property. [code]0[/code] is untyped.
+		</member>
+		<member name="type_class" type="StringName" setter="" getter="get_type_class" default="&amp;&quot;&quot;">
+			The property class name when [member type] is [Object].
+		</member>
+	</members>
+</class>
