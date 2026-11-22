@@ -99,6 +99,8 @@ class GDScript : public Script {
 	HashMap<StringName, Ref<GDScript>> subclasses;
 	HashMap<StringName, MethodInfo> _signals;
 	Dictionary rpc_config;
+	// Compile-time user annotation bags. Not part of the property list.
+	Dictionary annotations;
 
 public:
 	struct LambdaInfo {
@@ -327,6 +329,7 @@ public:
 	virtual void get_members(HashSet<StringName> *r_members) override;
 
 	virtual const Variant get_rpc_config() const override;
+	Dictionary get_annotations() const;
 
 #ifdef TOOLS_ENABLED
 	virtual bool is_placeholder_fallback_enabled() const override { return placeholder_fallback_enabled; }

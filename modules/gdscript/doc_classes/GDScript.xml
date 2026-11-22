@@ -12,6 +12,22 @@
 		<link title="GDScript documentation index">$DOCS_URL/tutorials/scripting/gdscript/index.html</link>
 	</tutorials>
 	<methods>
+		<method name="get_annotations">
+			<return type="Dictionary" />
+			<description>
+				Returns the user annotations applied to this script. Built-in annotations such as [code]@export[/code] and [code]@rpc[/code] are not included.
+				Missing keys mean that target has no user annotations. The dictionary can contain:
+				[codeblock]
+				{
+					"script": [], # Header annotations on this class only.
+					"variables": {}, # Member name to an array of entries.
+					"functions": {}, # Function name to an array of entries.
+					"parameters": {}, # Function name to a dictionary of parameter name to an array of entries.
+				}
+				[/codeblock]
+				Each entry is [code]{ "name": StringName, "values": Dictionary }[/code]. [code]name[/code] is the annotation class's [code]class_name[/code]. [code]values[/code] holds the folded attribute values, including defaults. Annotations written on a base script stay on that script.
+			</description>
+		</method>
 		<method name="new" qualifiers="vararg">
 			<return type="Variant" />
 			<description>

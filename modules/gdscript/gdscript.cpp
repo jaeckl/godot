@@ -928,6 +928,10 @@ void GDScript::get_members(HashSet<StringName> *r_members) {
 	}
 }
 
+Dictionary GDScript::get_annotations() const {
+	return annotations;
+}
+
 const Variant GDScript::get_rpc_config() const {
 	return rpc_config;
 }
@@ -1089,6 +1093,7 @@ void GDScript::_get_property_list(List<PropertyInfo> *p_properties) const {
 
 void GDScript::_bind_methods() {
 	ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "new", &GDScript::_new, MethodInfo("new"));
+	ClassDB::bind_method(D_METHOD("get_annotations"), &GDScript::get_annotations);
 }
 
 void GDScript::set_path_cache(const String &p_path) {

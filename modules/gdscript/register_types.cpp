@@ -31,6 +31,7 @@
 #include "register_types.h"
 
 #include "gdscript.h"
+#include "gdscript_annotation.h"
 #include "gdscript_cache.h"
 #include "gdscript_parser.h"
 #include "gdscript_resource_format.h"
@@ -138,6 +139,7 @@ static void _editor_init() {
 void initialize_gdscript_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SERVERS) {
 		GDREGISTER_CLASS(GDScript);
+		GDREGISTER_ABSTRACT_CLASS(GDScriptAnnotation);
 		GDREGISTER_INTERNAL_CLASS(GDScriptFunctionState);
 
 		script_language_gd = memnew(GDScriptLanguage);

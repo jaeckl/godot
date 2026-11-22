@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="GDScriptAnnotation" inherits="RefCounted" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Abstract base for user-defined GDScript annotations.
+	</brief_description>
+	<description>
+		Extend this class to define an annotation that scripts can apply with [code]@[/code].
+		[codeblock]
+		class_name MyCustomAnnotation
+		extends GDScriptAnnotation
+
+		var my_dict: Dictionary = {}
+		[/codeblock]
+		A use such as [code]@MyCustomAnnotation(my_dict={"asd": "asda"})[/code] stores the folded attribute values on the compiled script. Read them with [method GDScript.get_annotations]. Applying an annotation does not construct [GDScriptAnnotation], and [code]_init[/code] is not called.
+		Only a global [code]class_name[/code] that extends this class can be used as an annotation. The class cannot be abstract. [GDScriptAnnotation] itself is not a valid annotation.
+	</description>
+</class>
