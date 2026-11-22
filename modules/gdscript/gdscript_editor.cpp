@@ -3579,6 +3579,19 @@ static void _find_call_arguments(GDScriptParser::CompletionContext &p_context, c
 				}
 				options.insert(option.display, option);
 			}
+			LocalVector<StringName> global_classes;
+			ScriptServer::get_global_class_list(global_classes);
+			for (const StringName &class_name : global_classes) {
+				if (ScriptServer::is_global_class_abstract(class_name)) {
+					continue;
+				}
+				if (ScriptServer::get_global_class_native_base(class_name) != SNAME("GDScriptAnnotation")) {
+					continue;
+				}
+				EditorLanguage::CompletionOption option(class_name, EditorLanguage::CompletionKind::PLAIN_TEXT);
+				option.insert_text += "(";
+				options.insert(option.display, option);
+			}
 			r_forced = true;
 		} break;
 		case GDScriptParser::COMPLETION_ANNOTATION_ARGUMENTS: {

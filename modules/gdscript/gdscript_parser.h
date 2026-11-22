@@ -383,6 +383,8 @@ public:
 	struct AnnotationNode : public Node {
 		StringName name;
 		LocalVector<ExpressionNode *> arguments;
+		// Parallel to `arguments`. An empty name means a positional argument.
+		LocalVector<StringName> argument_names;
 		LocalVector<Variant> resolved_arguments;
 
 		/** Information of the annotation. Might be null for unknown annotations. */
@@ -390,6 +392,11 @@ public:
 		PropertyInfo export_info;
 		bool is_resolved = false;
 		bool is_applied = false;
+		// User annotation (`@ClassName`) rather than a built-in `@` name.
+		bool is_user = false;
+		bool user_resolved = false;
+		StringName user_class_name;
+		Dictionary user_values;
 
 		bool apply(GDScriptParser *p_this, Node *p_target, ClassNode *p_class);
 		bool applies_to(uint32_t p_target_kinds) const;
@@ -794,6 +801,12 @@ public:
 
 		bool resolved_interface = false;
 		bool resolved_body = false;
+		// True while members of this class are still being resolved.
+		bool resolving_members = false;
+		// Set after members exist and before user annotations on this class are resolved.
+		bool interface_members_ready = false;
+		bool annotation_schema_checked = false;
+		bool user_annotations_resolved = false;
 
 		StringName get_global_name() const {
 			return (outer == nullptr && identifier != nullptr) ? identifier->name : StringName();
@@ -1459,6 +1472,7 @@ private:
 			FUNCTION = 1 << 5,
 			STATEMENT = 1 << 6,
 			STANDALONE = 1 << 7,
+			PARAMETER = 1 << 8,
 			CLASS_LEVEL = CLASS | VARIABLE | CONSTANT | SIGNAL | FUNCTION,
 		};
 		uint32_t target_kind = 0; // Flags.
@@ -1602,7 +1616,7 @@ private:
 	void parse_class_member(T *(GDScriptParser::*p_parse_function)(bool), AnnotationInfo::TargetKind p_target, const String &p_member_kind, bool p_is_static = false);
 	SignalNode *parse_signal(bool p_is_static);
 	EnumNode *parse_enum(bool p_is_static);
-	ParameterNode *parse_parameter();
+	ParameterNode *parse_parameter(bool p_allow_annotations);
 	FunctionNode *parse_function(bool p_is_static);
 	bool parse_function_signature(FunctionNode *p_function, SuiteNode *p_body, const String &p_type, int p_signature_start);
 	SuiteNode *parse_suite(const String &p_context, SuiteNode *p_suite = nullptr, bool p_for_lambda = false);

@@ -69,6 +69,32 @@ class GDScriptAnalyzer {
 	GDScriptParser::DataType resolve_datatype(GDScriptParser::TypeNode *p_type);
 
 	void resolve_annotation(GDScriptParser::AnnotationNode *p_annotation);
+
+	struct AnnotationAttribute {
+		StringName name;
+		GDScriptParser::DataType type;
+		bool has_default = false;
+		Variant default_value;
+	};
+
+	struct AnnotationUseFrame {
+		String fqcn;
+		GDScriptAnalyzer *analyzer = nullptr;
+		const GDScriptParser::ClassNode *class_node = nullptr;
+	};
+
+	static Vector<AnnotationUseFrame> annotation_use_stack;
+
+	bool _class_extends_gdscript_annotation(const GDScriptParser::ClassNode *p_class) const;
+	bool _annotation_use_stack_has(const String &p_fqcn) const;
+	void _report_annotation_cycle(const GDScriptParser::Node *p_source) const;
+	void _collect_annotation_attributes(GDScriptParser::ClassNode *p_class, Vector<AnnotationAttribute> &r_attributes, bool p_report_local_errors, HashSet<const GDScriptParser::ClassNode *> &p_seen);
+	GDScriptParser::ClassNode *_find_annotation_class(const StringName &p_class_name, GDScriptParser::ClassNode *p_current, const GDScriptParser::Node *p_source);
+	bool _coerce_annotation_value(const GDScriptParser::DataType &p_type, Variant &r_value, const GDScriptParser::Node *p_source, const String &p_annotation_name, const String &p_attribute_name);
+	bool _fold_annotation_argument(GDScriptParser::ExpressionNode *p_expression, const GDScriptParser::DataType &p_type, Variant &r_value, const String &p_annotation_name, const String &p_attribute_label);
+	void _resolve_user_annotation(GDScriptParser::AnnotationNode *p_annotation, GDScriptParser::ClassNode *p_current, HashSet<StringName> &r_seen);
+	void _resolve_user_annotation_list(const List<GDScriptParser::AnnotationNode *> &p_annotations, GDScriptParser::ClassNode *p_current);
+	void _resolve_class_user_annotations(GDScriptParser::ClassNode *p_class);
 	void resolve_class_member(GDScriptParser::ClassNode *p_class, const StringName &p_name, const GDScriptParser::Node *p_source = nullptr);
 	void resolve_class_member(GDScriptParser::ClassNode *p_class, uint32_t p_index, const GDScriptParser::Node *p_source = nullptr);
 	void resolve_class_interface(GDScriptParser::ClassNode *p_class, const GDScriptParser::Node *p_source = nullptr);

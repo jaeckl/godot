@@ -1329,8 +1329,10 @@ void GDScriptAnalyzer::resolve_class_interface(GDScriptParser::ClassNode *p_clas
 		}
 
 		p_class->resolved_interface = true;
+		p_class->resolving_members = true;
 
 		if (resolve_class_inheritance(p_class) != OK) {
+			p_class->resolving_members = false;
 			return;
 		}
 
@@ -1365,6 +1367,20 @@ void GDScriptAnalyzer::resolve_class_interface(GDScriptParser::ClassNode *p_clas
 			parser->push_warning(static_unload ? static_unload : p_class, GDScriptWarning::REDUNDANT_STATIC_UNLOAD);
 		}
 #endif // DEBUG_ENABLED
+
+		p_class->resolving_members = false;
+		p_class->interface_members_ready = true;
+
+		GDScriptParser::ClassNode *previous_user_class = parser->current_class;
+		parser->current_class = p_class;
+		if (_class_extends_gdscript_annotation(p_class) && !p_class->annotation_schema_checked) {
+			p_class->annotation_schema_checked = true;
+			Vector<AnnotationAttribute> schema;
+			HashSet<const GDScriptParser::ClassNode *> seen;
+			_collect_annotation_attributes(p_class, schema, true, seen);
+		}
+		_resolve_class_user_annotations(p_class);
+		parser->current_class = previous_user_class;
 	}
 }
 
@@ -1694,6 +1710,9 @@ void GDScriptAnalyzer::resolve_node(GDScriptParser::Node *p_node, bool p_is_root
 }
 
 void GDScriptAnalyzer::resolve_annotation(GDScriptParser::AnnotationNode *p_annotation) {
+	if (p_annotation->is_user) {
+		return;
+	}
 	ERR_FAIL_COND_MSG(!parser->valid_annotations.has(p_annotation->name), vformat(R"(Annotation "%s" not found to validate.)", p_annotation->name));
 
 	if (p_annotation->is_resolved) {
@@ -6681,6 +6700,386 @@ void GDScriptAnalyzer::resolve_pending_lambda_bodies() {
 
 	current_lambda = previous_lambda;
 	static_context = previous_static_context;
+}
+
+Vector<GDScriptAnalyzer::AnnotationUseFrame> GDScriptAnalyzer::annotation_use_stack;
+
+bool GDScriptAnalyzer::_class_extends_gdscript_annotation(const GDScriptParser::ClassNode *p_class) const {
+	HashSet<const GDScriptParser::ClassNode *> seen;
+	const GDScriptParser::ClassNode *current = p_class;
+	while (current != nullptr && !seen.has(current)) {
+		seen.insert(current);
+		const GDScriptParser::DataType &base = current->base_type;
+		if (base.kind == GDScriptParser::DataType::NATIVE) {
+			return base.native_type == SNAME("GDScriptAnnotation") || ClassDB::is_parent_class(base.native_type, SNAME("GDScriptAnnotation"));
+		}
+		if (base.kind == GDScriptParser::DataType::CLASS && base.class_type != nullptr) {
+			current = base.class_type;
+			continue;
+		}
+		return false;
+	}
+	return false;
+}
+
+bool GDScriptAnalyzer::_annotation_use_stack_has(const String &p_fqcn) const {
+	for (const AnnotationUseFrame &frame : annotation_use_stack) {
+		if (frame.fqcn == p_fqcn) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void GDScriptAnalyzer::_report_annotation_cycle(const GDScriptParser::Node *p_source) const {
+	push_error("Cyclic annotation dependency.", p_source);
+	for (const AnnotationUseFrame &frame : annotation_use_stack) {
+		if (frame.analyzer != nullptr && frame.analyzer != this && frame.class_node != nullptr) {
+			frame.analyzer->push_error("Cyclic annotation dependency.", frame.class_node);
+		}
+	}
+}
+
+void GDScriptAnalyzer::_collect_annotation_attributes(GDScriptParser::ClassNode *p_class, Vector<AnnotationAttribute> &r_attributes, bool p_report_local_errors, HashSet<const GDScriptParser::ClassNode *> &p_seen) {
+	if (p_class == nullptr || p_seen.has(p_class)) {
+		return;
+	}
+	p_seen.insert(p_class);
+
+	if (p_class->base_type.kind == GDScriptParser::DataType::CLASS && p_class->base_type.class_type != nullptr) {
+		_collect_annotation_attributes(p_class->base_type.class_type, r_attributes, false, p_seen);
+	}
+
+	HashMap<StringName, int> index;
+	for (int i = 0; i < r_attributes.size(); i++) {
+		index[r_attributes[i].name] = i;
+	}
+
+	for (const GDScriptParser::ClassNode::Member &member : p_class->members) {
+		if (member.type != GDScriptParser::ClassNode::Member::VARIABLE) {
+			continue;
+		}
+		GDScriptParser::VariableNode *variable = member.variable;
+		if (variable == nullptr || variable->identifier == nullptr || variable->is_static) {
+			continue;
+		}
+
+		AnnotationAttribute attribute;
+		attribute.name = variable->identifier->name;
+		attribute.type = variable->type_constraint;
+		if (variable->initializer != nullptr) {
+			bool reduced = false;
+			Variant value = make_expression_reduced_value(variable->initializer, reduced);
+			if (!reduced) {
+				if (p_report_local_errors) {
+					push_error(vformat(R"(Annotation attribute "%s" default must be a constant.)", attribute.name), variable);
+				}
+			} else {
+				attribute.has_default = true;
+				attribute.default_value = value;
+			}
+		}
+
+#ifdef DEBUG_ENABLED
+		if (p_report_local_errors && variable->property != GDScriptParser::VariableNode::PROP_NONE) {
+			parser->push_warning(variable, GDScriptWarning::ANNOTATION_ATTRIBUTE_ACCESSOR);
+		}
+#endif
+
+		if (index.has(attribute.name)) {
+			r_attributes.write[index[attribute.name]] = attribute;
+		} else {
+			index[attribute.name] = r_attributes.size();
+			r_attributes.push_back(attribute);
+		}
+	}
+
+#ifdef DEBUG_ENABLED
+	if (p_report_local_errors && p_class->has_function(SNAME("_init"))) {
+		const GDScriptParser::ClassNode::Member init_member = p_class->get_member(SNAME("_init"));
+		if (init_member.type == GDScriptParser::ClassNode::Member::FUNCTION && init_member.function != nullptr) {
+			parser->push_warning(init_member.function, GDScriptWarning::ANNOTATION_INIT_NOT_CALLED);
+		}
+	}
+#endif
+}
+
+GDScriptParser::ClassNode *GDScriptAnalyzer::_find_annotation_class(const StringName &p_class_name, GDScriptParser::ClassNode *p_current, const GDScriptParser::Node *p_source) {
+	const String class_name = String(p_class_name);
+	if (!ScriptServer::is_global_class(class_name)) {
+		push_error(vformat(R"(Unknown annotation class "%s".)", class_name), p_source);
+		return nullptr;
+	}
+
+	const String path = ScriptServer::get_global_class_path(class_name);
+	if (!path.has_extension(GDScriptLanguage::get_singleton()->get_extension())) {
+		push_error(vformat(R"(Annotation class "%s" must be a GDScript class.)", class_name), p_source);
+		return nullptr;
+	}
+
+	GDScriptParser::ClassNode *target = nullptr;
+	GDScriptAnalyzer *target_analyzer = this;
+	if (GDScript::is_canonically_equal_paths(parser->script_path, path)) {
+		target = parser->head;
+	} else {
+		Ref<GDScriptParserRef> ref = parser->get_depended_parser_for(path);
+		if (ref.is_null()) {
+			push_error(vformat(R"(Could not parse annotation class "%s".)", class_name), p_source);
+			return nullptr;
+		}
+		const Error err = ref->raise_status(GDScriptParserRef::PARSED);
+		if (err != OK) {
+			push_error(vformat(R"(Could not parse annotation class "%s".)", class_name), p_source);
+			return nullptr;
+		}
+		target = ref->get_parser()->head;
+		target_analyzer = ref->get_analyzer();
+	}
+
+	if (target == nullptr || target_analyzer == nullptr) {
+		push_error(vformat(R"(Could not resolve annotation class "%s".)", class_name), p_source);
+		return nullptr;
+	}
+
+	if (_annotation_use_stack_has(target->fqcn) && target != p_current) {
+		_report_annotation_cycle(p_source);
+		return nullptr;
+	}
+
+	if (target == p_current) {
+		if (!target->interface_members_ready) {
+			_report_annotation_cycle(p_source);
+			return nullptr;
+		}
+	} else if (!target->interface_members_ready) {
+		if (target->resolving_members) {
+			_report_annotation_cycle(p_source);
+			return nullptr;
+		}
+		target_analyzer->resolve_class_interface(target, p_source);
+		if (!target->interface_members_ready) {
+			push_error(vformat(R"(Could not resolve annotation class "%s".)", class_name), p_source);
+			return nullptr;
+		}
+	}
+
+	if (target->is_abstract || ScriptServer::is_global_class_abstract(class_name)) {
+		push_error(vformat(R"(Annotation class "%s" is abstract.)", class_name), p_source);
+		return nullptr;
+	}
+	if (!_class_extends_gdscript_annotation(target)) {
+		push_error(vformat(R"(Annotation class "%s" must extend "GDScriptAnnotation".)", class_name), p_source);
+		return nullptr;
+	}
+	return target;
+}
+
+bool GDScriptAnalyzer::_coerce_annotation_value(const GDScriptParser::DataType &p_type, Variant &r_value, const GDScriptParser::Node *p_source, const String &p_annotation_name, const String &p_attribute_name) {
+	if (!p_type.is_hard_type() || p_type.is_variant()) {
+		return true;
+	}
+
+	Variant::Type expected = Variant::NIL;
+	switch (p_type.kind) {
+		case GDScriptParser::DataType::BUILTIN:
+			expected = p_type.builtin_type;
+			break;
+		case GDScriptParser::DataType::ENUM:
+			expected = Variant::INT;
+			break;
+		case GDScriptParser::DataType::NATIVE:
+		case GDScriptParser::DataType::CLASS:
+		case GDScriptParser::DataType::SCRIPT:
+			expected = Variant::OBJECT;
+			break;
+		default:
+			return true;
+	}
+
+	if (r_value.get_type() == expected) {
+		return true;
+	}
+
+#ifdef DEBUG_ENABLED
+	if (expected == Variant::INT && r_value.get_type() == Variant::FLOAT && p_source != nullptr) {
+		parser->push_warning(p_source, GDScriptWarning::NARROWING_CONVERSION);
+	}
+#endif
+
+	if (!Variant::can_convert_strict(r_value.get_type(), expected)) {
+		push_error(vformat(R"(Invalid value for annotation "%s" attribute "%s": expected "%s" but is "%s".)", p_annotation_name, p_attribute_name, p_type.to_string(), Variant::get_type_name(r_value.get_type())), p_source);
+		return false;
+	}
+
+	Variant converted;
+	const Variant *from = &r_value;
+	Callable::CallError call_error;
+	Variant::construct(expected, converted, &from, 1, call_error);
+	if (call_error.error != Callable::CallError::CALL_OK) {
+		push_error(vformat(R"(Cannot convert annotation "%s" attribute "%s" from "%s" to "%s".)", p_annotation_name, p_attribute_name, Variant::get_type_name(r_value.get_type()), Variant::get_type_name(expected)), p_source);
+		return false;
+	}
+
+	r_value = converted;
+	return true;
+}
+
+bool GDScriptAnalyzer::_fold_annotation_argument(GDScriptParser::ExpressionNode *p_expression, const GDScriptParser::DataType &p_type, Variant &r_value, const String &p_annotation_name, const String &p_attribute_label) {
+	if (p_expression == nullptr) {
+		push_error(vformat(R"(Argument %s of annotation "%s" isn't a constant expression.)", p_attribute_label, p_annotation_name));
+		return false;
+	}
+
+	reduce_expression(p_expression);
+	bool reduced = false;
+	Variant value = make_expression_reduced_value(p_expression, reduced);
+	if (!reduced) {
+		push_error(vformat(R"(Argument %s of annotation "%s" isn't a constant expression.)", p_attribute_label, p_annotation_name), p_expression);
+		return false;
+	}
+	if (!_coerce_annotation_value(p_type, value, p_expression, p_annotation_name, p_attribute_label)) {
+		return false;
+	}
+	r_value = value;
+	return true;
+}
+
+void GDScriptAnalyzer::_resolve_user_annotation(GDScriptParser::AnnotationNode *p_annotation, GDScriptParser::ClassNode *p_current, HashSet<StringName> &r_seen) {
+	if (p_annotation == nullptr || !p_annotation->is_user || p_annotation->user_resolved) {
+		return;
+	}
+
+	const String raw_name = String(p_annotation->name);
+	if (!raw_name.begins_with("@") || raw_name.length() < 2) {
+		push_error(vformat(R"(Unknown annotation class "%s".)", raw_name), p_annotation);
+		return;
+	}
+	const StringName class_name = raw_name.substr(1);
+	if (r_seen.has(class_name)) {
+		push_error(vformat(R"(Annotation "@%s" can only be used once per target.)", class_name), p_annotation);
+		return;
+	}
+
+	GDScriptParser::ClassNode *target = _find_annotation_class(class_name, p_current, p_annotation);
+	if (target == nullptr) {
+		return;
+	}
+
+	Vector<AnnotationAttribute> attributes;
+	HashSet<const GDScriptParser::ClassNode *> seen_classes;
+	_collect_annotation_attributes(target, attributes, false, seen_classes);
+
+	HashMap<StringName, int> index;
+	for (int i = 0; i < attributes.size(); i++) {
+		index[attributes[i].name] = i;
+	}
+
+	bool named = false;
+	for (const StringName &argument_name : p_annotation->argument_names) {
+		if (argument_name != StringName()) {
+			named = true;
+			break;
+		}
+	}
+
+	Dictionary values;
+	HashSet<StringName> provided;
+	for (const AnnotationAttribute &attribute : attributes) {
+		if (attribute.has_default) {
+			values[attribute.name] = attribute.default_value;
+		}
+	}
+
+	if (named) {
+		for (uint32_t i = 0; i < p_annotation->arguments.size(); i++) {
+			const StringName argument_name = i < p_annotation->argument_names.size() ? p_annotation->argument_names[i] : StringName();
+			if (argument_name == StringName() || !index.has(argument_name)) {
+				push_error(vformat(R"(Annotation "%s" has no attribute "%s".)", p_annotation->name, argument_name), p_annotation);
+				return;
+			}
+			const AnnotationAttribute &attribute = attributes[index[argument_name]];
+			Variant value;
+			if (!_fold_annotation_argument(p_annotation->arguments[i], attribute.type, value, p_annotation->name, "\"" + String(argument_name) + "\"")) {
+				return;
+			}
+			values[argument_name] = value;
+			provided.insert(argument_name);
+		}
+	} else {
+		if (p_annotation->arguments.size() > (uint32_t)attributes.size()) {
+			push_error(vformat(R"(Annotation "%s" accepts at most %d arguments, but %d were given.)", p_annotation->name, attributes.size(), p_annotation->arguments.size()), p_annotation);
+			return;
+		}
+		for (uint32_t i = 0; i < p_annotation->arguments.size(); i++) {
+			const AnnotationAttribute &attribute = attributes[i];
+			Variant value;
+			if (!_fold_annotation_argument(p_annotation->arguments[i], attribute.type, value, p_annotation->name, itos(i + 1))) {
+				return;
+			}
+			values[attribute.name] = value;
+			provided.insert(attribute.name);
+		}
+	}
+
+	for (const AnnotationAttribute &attribute : attributes) {
+		if (!attribute.has_default && !provided.has(attribute.name)) {
+			push_error(vformat(R"(Annotation "%s" requires attribute "%s".)", p_annotation->name, attribute.name), p_annotation);
+			return;
+		}
+	}
+
+	p_annotation->user_class_name = class_name;
+	p_annotation->user_values = values;
+	p_annotation->user_resolved = true;
+	r_seen.insert(class_name);
+}
+
+void GDScriptAnalyzer::_resolve_user_annotation_list(const List<GDScriptParser::AnnotationNode *> &p_annotations, GDScriptParser::ClassNode *p_current) {
+	HashSet<StringName> seen;
+	for (GDScriptParser::AnnotationNode *annotation : p_annotations) {
+		_resolve_user_annotation(annotation, p_current, seen);
+	}
+}
+
+void GDScriptAnalyzer::_resolve_class_user_annotations(GDScriptParser::ClassNode *p_class) {
+	if (p_class == nullptr || p_class->user_annotations_resolved) {
+		return;
+	}
+	p_class->user_annotations_resolved = true;
+
+	const bool track = _class_extends_gdscript_annotation(p_class);
+	if (track) {
+		if (_annotation_use_stack_has(p_class->fqcn)) {
+			_report_annotation_cycle(p_class);
+			return;
+		}
+		AnnotationUseFrame frame;
+		frame.fqcn = p_class->fqcn;
+		frame.analyzer = this;
+		frame.class_node = p_class;
+		annotation_use_stack.push_back(frame);
+	}
+
+	_resolve_user_annotation_list(p_class->annotations, p_class);
+	for (const GDScriptParser::ClassNode::Member &member : p_class->members) {
+		if (member.type == GDScriptParser::ClassNode::Member::VARIABLE && member.variable != nullptr) {
+			_resolve_user_annotation_list(member.variable->annotations, p_class);
+		} else if (member.type == GDScriptParser::ClassNode::Member::FUNCTION && member.function != nullptr) {
+			_resolve_user_annotation_list(member.function->annotations, p_class);
+			for (GDScriptParser::ParameterNode *parameter : member.function->parameters) {
+				if (parameter != nullptr) {
+					_resolve_user_annotation_list(parameter->annotations, p_class);
+				}
+			}
+			if (member.function->rest_parameter != nullptr) {
+				_resolve_user_annotation_list(member.function->rest_parameter->annotations, p_class);
+			}
+		}
+	}
+
+	if (track && !annotation_use_stack.is_empty()) {
+		annotation_use_stack.remove_at(annotation_use_stack.size() - 1);
+	}
 }
 
 bool GDScriptAnalyzer::class_exists(const StringName &p_class) {

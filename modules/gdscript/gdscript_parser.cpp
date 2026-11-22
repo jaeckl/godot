@@ -1526,13 +1526,32 @@ GDScriptParser::ConstantNode *GDScriptParser::parse_constant(bool p_is_static) {
 	return constant;
 }
 
-GDScriptParser::ParameterNode *GDScriptParser::parse_parameter() {
+GDScriptParser::ParameterNode *GDScriptParser::parse_parameter(bool p_allow_annotations) {
+	List<AnnotationNode *> annotations;
+	while (check(GDScriptTokenizer::Token::ANNOTATION)) {
+		if (!p_allow_annotations) {
+			if (current_lambda != nullptr) {
+				push_error("Annotations are not allowed on lambda parameters.");
+			} else {
+				push_error("Annotations are not allowed on signal parameters.");
+			}
+		}
+		advance();
+		AnnotationNode *annotation = parse_annotation(AnnotationInfo::PARAMETER);
+		if (p_allow_annotations && annotation != nullptr) {
+			annotations.push_back(annotation);
+		}
+	}
+
 	if (!consume(GDScriptTokenizer::Token::IDENTIFIER, R"(Expected parameter name.)")) {
 		return nullptr;
 	}
 
 	ParameterNode *parameter = alloc_node<ParameterNode>();
 	parameter->identifier = parse_identifier();
+	for (AnnotationNode *annotation : annotations) {
+		parameter->annotations.push_back(annotation);
+	}
 
 	if (match(GDScriptTokenizer::Token::COLON)) {
 		if (check((GDScriptTokenizer::Token::EQUAL))) {
@@ -1575,7 +1594,7 @@ GDScriptParser::SignalNode *GDScriptParser::parse_signal(bool p_is_static) {
 				break;
 			}
 
-			ParameterNode *parameter = parse_parameter();
+			ParameterNode *parameter = parse_parameter(false);
 			if (parameter == nullptr) {
 				push_error("Expected signal parameter name.");
 				break;
@@ -1715,7 +1734,7 @@ bool GDScriptParser::parse_function_signature(FunctionNode *p_function, SuiteNod
 				is_rest = true;
 			}
 
-			ParameterNode *parameter = parse_parameter();
+			ParameterNode *parameter = parse_parameter(p_type != "lambda");
 			if (parameter == nullptr) {
 				break;
 			}
@@ -1857,20 +1876,16 @@ GDScriptParser::AnnotationNode *GDScriptParser::parse_annotation(uint32_t p_vali
 
 	bool valid = true;
 
-	if (!valid_annotations.has(annotation->name)) {
-		if (annotation->name == "@deprecated") {
-			push_error(R"("@deprecated" annotation does not exist. Use "## @deprecated: Reason here." instead.)");
-		} else if (annotation->name == "@experimental") {
-			push_error(R"("@experimental" annotation does not exist. Use "## @experimental: Reason here." instead.)");
-		} else if (annotation->name == "@tutorial") {
-			push_error(R"("@tutorial" annotation does not exist. Use "## @tutorial(Title): https://example.com" instead.)");
-		} else {
-			push_error(vformat(R"(Unrecognized annotation: "%s".)", annotation->name));
-		}
+	if (annotation->name == "@deprecated") {
+		push_error(R"("@deprecated" annotation does not exist. Use "## @deprecated: Reason here." instead.)");
 		valid = false;
-	}
-
-	if (valid) {
+	} else if (annotation->name == "@experimental") {
+		push_error(R"("@experimental" annotation does not exist. Use "## @experimental: Reason here." instead.)");
+		valid = false;
+	} else if (annotation->name == "@tutorial") {
+		push_error(R"("@tutorial" annotation does not exist. Use "## @tutorial(Title): https://example.com" instead.)");
+		valid = false;
+	} else if (valid_annotations.has(annotation->name)) {
 		annotation->info = &valid_annotations[annotation->name];
 
 		if (!annotation->applies_to(p_valid_targets)) {
@@ -1881,7 +1896,33 @@ GDScriptParser::AnnotationNode *GDScriptParser::parse_annotation(uint32_t p_vali
 			}
 			valid = false;
 		}
+	} else {
+		annotation->is_user = true;
+		if (!annotation->applies_to(p_valid_targets)) {
+			push_error(vformat(R"(Annotation "%s" is not allowed in this level.)", annotation->name));
+			valid = false;
+		}
 	}
+
+	auto skip_nested_annotation = [this]() {
+		if (!check(GDScriptTokenizer::Token::PARENTHESIS_OPEN)) {
+			return;
+		}
+		int depth = 0;
+		while (!is_at_end()) {
+			if (check(GDScriptTokenizer::Token::PARENTHESIS_OPEN)) {
+				depth++;
+			} else if (check(GDScriptTokenizer::Token::PARENTHESIS_CLOSE)) {
+				depth--;
+				advance();
+				if (depth == 0) {
+					return;
+				}
+				continue;
+			}
+			advance();
+		}
+	};
 
 	if (check(GDScriptTokenizer::Token::PARENTHESIS_OPEN)) {
 		push_multiline(true);
@@ -1889,6 +1930,8 @@ GDScriptParser::AnnotationNode *GDScriptParser::parse_annotation(uint32_t p_vali
 		// Arguments.
 		push_completion_call(annotation);
 		int argument_index = 0;
+		bool named_used = false;
+		bool positional_used = false;
 		do {
 			make_completion_context(COMPLETION_ANNOTATION_ARGUMENTS, annotation, argument_index);
 			set_last_completion_call_arg(argument_index);
@@ -1897,16 +1940,78 @@ GDScriptParser::AnnotationNode *GDScriptParser::parse_annotation(uint32_t p_vali
 				break;
 			}
 
-			ExpressionNode *argument = parse_expression(false);
-
-			if (argument == nullptr) {
-				push_error("Expected expression as the annotation argument.");
+			if (check(GDScriptTokenizer::Token::ANNOTATION)) {
+				push_error("Nested annotations are not supported.");
 				valid = false;
+				advance();
+				skip_nested_annotation();
 			} else {
-				annotation->arguments.push_back(argument);
+				ExpressionNode *argument = parse_expression(false, true);
 
-				if (argument->type == Node::LITERAL) {
-					override_completion_context(argument, COMPLETION_ANNOTATION_ARGUMENTS, annotation, argument_index);
+				if (argument == nullptr) {
+					push_error("Expected expression as the annotation argument.");
+					valid = false;
+				} else if (check(GDScriptTokenizer::Token::EQUAL)) {
+					if (argument->type != Node::IDENTIFIER) {
+						push_error("Named annotation argument must be an identifier.");
+						valid = false;
+						advance();
+						if (check(GDScriptTokenizer::Token::ANNOTATION)) {
+							push_error("Nested annotations are not supported.");
+							advance();
+							skip_nested_annotation();
+						} else if (parse_expression(false) == nullptr) {
+							push_error("Expected expression as the annotation argument.");
+						}
+					} else {
+						if (!annotation->is_user) {
+							push_error("Built-in annotations do not support named arguments.");
+							valid = false;
+						}
+						const StringName arg_name = static_cast<IdentifierNode *>(argument)->name;
+						for (const StringName &existing : annotation->argument_names) {
+							if (existing == arg_name) {
+								push_error(vformat(R"(Named argument "%s" was already given.)", arg_name));
+								valid = false;
+								break;
+							}
+						}
+						if (positional_used) {
+							push_error("Annotation arguments cannot mix positional and named values.");
+							valid = false;
+						}
+						named_used = true;
+						advance();
+						if (check(GDScriptTokenizer::Token::ANNOTATION)) {
+							push_error("Nested annotations are not supported.");
+							valid = false;
+							advance();
+							skip_nested_annotation();
+						} else {
+							ExpressionNode *value = parse_expression(false);
+							if (value == nullptr) {
+								push_error("Expected expression as the annotation argument.");
+								valid = false;
+							} else {
+								annotation->argument_names.push_back(arg_name);
+								annotation->arguments.push_back(value);
+								if (value->type == Node::LITERAL) {
+									override_completion_context(value, COMPLETION_ANNOTATION_ARGUMENTS, annotation, argument_index);
+								}
+							}
+						}
+					}
+				} else {
+					if (named_used) {
+						push_error("Annotation arguments cannot mix positional and named values.");
+						valid = false;
+					}
+					positional_used = true;
+					annotation->argument_names.push_back(StringName());
+					annotation->arguments.push_back(argument);
+					if (argument->type == Node::LITERAL) {
+						override_completion_context(argument, COMPLETION_ANNOTATION_ARGUMENTS, annotation, argument_index);
+					}
 				}
 			}
 
@@ -1921,7 +2026,7 @@ GDScriptParser::AnnotationNode *GDScriptParser::parse_annotation(uint32_t p_vali
 
 	match(GDScriptTokenizer::Token::NEWLINE); // Newline after annotation is optional.
 
-	if (valid) {
+	if (valid && !annotation->is_user) {
 		valid = validate_annotation_arguments(annotation);
 	}
 
@@ -4396,6 +4501,9 @@ const GDScriptParser::SuiteNode::Local &GDScriptParser::SuiteNode::get_local(con
 }
 
 bool GDScriptParser::AnnotationNode::apply(GDScriptParser *p_this, Node *p_target, ClassNode *p_class) {
+	if (is_user) {
+		return true;
+	}
 	if (is_applied) {
 		return true;
 	}
@@ -4404,7 +4512,13 @@ bool GDScriptParser::AnnotationNode::apply(GDScriptParser *p_this, Node *p_targe
 }
 
 bool GDScriptParser::AnnotationNode::applies_to(uint32_t p_target_kinds) const {
-	return (info->target_kind & p_target_kinds) > 0;
+	uint32_t kind = 0;
+	if (is_user) {
+		kind = AnnotationInfo::SCRIPT | AnnotationInfo::CLASS | AnnotationInfo::VARIABLE | AnnotationInfo::FUNCTION | AnnotationInfo::PARAMETER;
+	} else if (info != nullptr) {
+		kind = info->target_kind;
+	}
+	return (kind & p_target_kinds) > 0;
 }
 
 bool GDScriptParser::validate_annotation_arguments(AnnotationNode *p_annotation) {

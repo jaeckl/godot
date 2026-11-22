@@ -2695,6 +2695,48 @@ Error GDScriptCompiler::_parse_setter_getter(GDScript *p_script, const GDScriptP
 	return err;
 }
 
+static Variant _own_annotation_value(const Variant &p_value) {
+	if (p_value.get_type() == Variant::ARRAY) {
+		Array copy = Array(p_value).duplicate(true);
+		for (int i = 0; i < copy.size(); i++) {
+			copy[i] = _own_annotation_value(copy[i]);
+		}
+		copy.make_read_only();
+		return copy;
+	}
+	if (p_value.get_type() == Variant::DICTIONARY) {
+		Dictionary copy = Dictionary(p_value).duplicate(true);
+		Array keys = copy.keys();
+		for (int i = 0; i < keys.size(); i++) {
+			const Variant key = keys[i];
+			copy[key] = _own_annotation_value(copy[key]);
+		}
+		copy.make_read_only();
+		return copy;
+	}
+	return p_value;
+}
+
+static void _append_user_annotations(Array &r_list, const List<GDScriptParser::AnnotationNode *> &p_annotations) {
+	for (const GDScriptParser::AnnotationNode *annotation : p_annotations) {
+		if (annotation == nullptr || !annotation->is_user || !annotation->user_resolved) {
+			continue;
+		}
+		Dictionary values;
+		const Array keys = annotation->user_values.keys();
+		for (int i = 0; i < keys.size(); i++) {
+			const Variant key = keys[i];
+			values[key] = _own_annotation_value(annotation->user_values[key]);
+		}
+		values.make_read_only();
+
+		Dictionary entry;
+		entry["name"] = annotation->user_class_name;
+		entry["values"] = values;
+		r_list.push_back(entry);
+	}
+}
+
 // Prepares given script, and inner class scripts, for compilation. It populates class members and
 // initializes method RPC info for its base classes first, then for itself, then for inner classes.
 // WARNING: This function cannot initiate compilation of other classes, or it will result in
@@ -2757,6 +2799,7 @@ Error GDScriptCompiler::_prepare_compilation(GDScript *p_script, const GDScriptP
 	p_script->implicit_ready = nullptr;
 	p_script->static_initializer = nullptr;
 	p_script->rpc_config.clear();
+	p_script->annotations.clear();
 	p_script->lambda_info.clear();
 
 	p_script->clearing = false;
@@ -3008,6 +3051,67 @@ Error GDScriptCompiler::_prepare_compilation(GDScript *p_script, const GDScriptP
 		}
 
 		p_script->constants.insert(name, subclass); //once parsed, goes to the list of constants
+	}
+
+	{
+		Dictionary user_annotations;
+		Array script_annotations;
+		_append_user_annotations(script_annotations, p_class->annotations);
+		if (!script_annotations.is_empty()) {
+			user_annotations["script"] = script_annotations;
+		}
+
+		Dictionary variables;
+		Dictionary functions;
+		Dictionary parameters;
+		for (const GDScriptParser::ClassNode::Member &member : p_class->members) {
+			if (member.type == member.VARIABLE && member.variable != nullptr && member.variable->identifier != nullptr) {
+				Array entries;
+				_append_user_annotations(entries, member.variable->annotations);
+				if (!entries.is_empty()) {
+					variables[member.variable->identifier->name] = entries;
+				}
+			} else if (member.type == member.FUNCTION && member.function != nullptr && member.function->identifier != nullptr) {
+				Array entries;
+				_append_user_annotations(entries, member.function->annotations);
+				if (!entries.is_empty()) {
+					functions[member.function->identifier->name] = entries;
+				}
+
+				Dictionary parameter_map;
+				for (const GDScriptParser::ParameterNode *parameter : member.function->parameters) {
+					if (parameter == nullptr || parameter->identifier == nullptr) {
+						continue;
+					}
+					Array parameter_entries;
+					_append_user_annotations(parameter_entries, parameter->annotations);
+					if (!parameter_entries.is_empty()) {
+						parameter_map[parameter->identifier->name] = parameter_entries;
+					}
+				}
+				if (member.function->rest_parameter != nullptr && member.function->rest_parameter->identifier != nullptr) {
+					Array parameter_entries;
+					_append_user_annotations(parameter_entries, member.function->rest_parameter->annotations);
+					if (!parameter_entries.is_empty()) {
+						parameter_map[member.function->rest_parameter->identifier->name] = parameter_entries;
+					}
+				}
+				if (!parameter_map.is_empty()) {
+					parameters[member.function->identifier->name] = parameter_map;
+				}
+			}
+		}
+
+		if (!variables.is_empty()) {
+			user_annotations["variables"] = variables;
+		}
+		if (!functions.is_empty()) {
+			user_annotations["functions"] = functions;
+		}
+		if (!parameters.is_empty()) {
+			user_annotations["parameters"] = parameters;
+		}
+		p_script->annotations = user_annotations;
 	}
 
 	return OK;
