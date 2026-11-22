@@ -1,4 +1,10 @@
 GDTEST_OK
+reflect script true true
+reflect health 2 false false health
+reflect export true false 2
+reflect static false true 2
+reflect ping 0 false 0
+reflect who who 4 greet
 each script|||UserAnnotation|script|
 each variable|health||UserAnnotation|field|
 each variable|stacked||UserAnnotation|stacked|
@@ -24,6 +30,8 @@ find variable|stacked|
 find variable|stacked|
 find function|ping|
 find parameter|greet|who
+find type true false
+find same false
 child each done
 each variable|host_value||UserAnnotation|host|
 each variable|grand_value||UserAnnotation|grand|
@@ -41,11 +49,11 @@ init untouched 0 0
 init header true false 7 script
 init missing true
 init stacked stacked false
-obj script|||script||false|true
-obj variable|health||field||false|true
-obj variable|stacked||stacked||false|true
-obj function|ping||function||false|true
-obj parameter|greet|who|parameter||false|true
+obj script|||script||false|true|ScriptInfo
+obj variable|health||field||false|true|VariableInfo
+obj variable|stacked||stacked||false|true|VariableInfo
+obj function|ping||function||false|true|FunctionInfo
+obj parameter|greet|who|parameter||false|true|ParameterInfo
 init find 6 6 5 5
 init row script||false
 init row field||false
@@ -53,7 +61,8 @@ init row stacked||false
 init row |1|false
 init row function||false
 init row parameter||false
-obj variable|host_value||host||false|true
-obj variable|grand_value||grand||false|true
+obj variable|host_value||host||false|true|VariableInfo
+host script UserAnnotationHost
+obj variable|grand_value||grand||false|true|VariableInfo
 init untouched 0 0
 tracked 0 0 tracked

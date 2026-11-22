@@ -13,6 +13,9 @@ var stacked := 0
 @UserAnnotationTracked(label="tracked")
 var tracked := 0
 
+@export var exported_value := 4
+static var static_value := 5
+
 @UserAnnotation(label="function")
 func ping() -> void:
 	pass
@@ -20,11 +23,48 @@ func ping() -> void:
 func greet(@UserAnnotation(label="parameter") who: String) -> void:
 	pass
 
-func _on_each(ann_name: StringName, values: Dictionary, context: Dictionary) -> void:
-	print("each ", context["target"], "|", context["member"], "|", context["parameter"], "|", ann_name, "|", values.get("label", ""), "|", values.get("extra", ""))
+func _slot(target: Variant) -> String:
+	if target is ScriptInfo:
+		return "script||"
+	if target is VariableInfo:
+		var info := target as VariableInfo
+		return "variable|" + str(info.name) + "|"
+	if target is FunctionInfo:
+		var info := target as FunctionInfo
+		return "function|" + str(info.name) + "|"
+	if target is ParameterInfo:
+		var info := target as ParameterInfo
+		return "parameter|" + str(info.function) + "|" + str(info.name)
+	return "bad||"
+
+func _view(target: Variant) -> String:
+	if target is ScriptInfo:
+		return "ScriptInfo"
+	if target is VariableInfo:
+		return "VariableInfo"
+	if target is FunctionInfo:
+		return "FunctionInfo"
+	if target is ParameterInfo:
+		return "ParameterInfo"
+	return "bad"
+
+func _on_each(ann_name: StringName, values: Dictionary, target: Object) -> void:
+	print("each ", _slot(target), "|", ann_name, "|", values.get("label", ""), "|", values.get("extra", ""))
 
 func test() -> void:
 	var script := get_script() as GDScript
+	var header_info := ReflectionUtils.get_script_info(script)
+	var health_info := ReflectionUtils.get_variable_info(script, "health")
+	var export_info := ReflectionUtils.get_variable_info(script, "exported_value")
+	var static_info := ReflectionUtils.get_variable_info(script, "static_value")
+	var ping_info := ReflectionUtils.get_function_info(script, "ping")
+	var who_info := ReflectionUtils.get_parameter_info(script, "greet", "who")
+	print("reflect script ", header_info is ScriptInfo, " ", is_same(header_info.gdscript, script))
+	print("reflect health ", health_info.type, " ", health_info.exported, " ", health_info.is_static, " ", health_info.name)
+	print("reflect export ", export_info.exported, " ", export_info.is_static, " ", export_info.type)
+	print("reflect static ", static_info.exported, " ", static_info.is_static, " ", static_info.type)
+	print("reflect ping ", ping_info.argument_count, " ", ping_info.is_static, " ", ping_info.arguments.size())
+	print("reflect who ", who_info.name, " ", who_info.type, " ", who_info.function)
 
 	AnnotationUtils.for_each_annotation(UserAnnotation, script, _on_each)
 	print("base query")
@@ -45,7 +85,9 @@ func test() -> void:
 
 	var found: Array = AnnotationUtils.find_annotated(script, UserAnnotationBase)
 	for row in found:
-		print("find ", row["target"], "|", row["member"], "|", row["parameter"])
+		print("find ", _slot(row))
+	print("find type ", found[0] is ScriptInfo, " ", found[0] is Dictionary)
+	print("find same ", is_same(found[2], found[3]))
 
 	AnnotationUtils.for_each_annotation(UserAnnotation, UserAnnotationChild, _on_each)
 	print("child each done")
@@ -94,14 +136,16 @@ func test() -> void:
 	var tracked_obj: UserAnnotationTracked = AnnotationUtils.instantiate_annotation(tracked_entry)
 	print("tracked ", UserAnnotationTracked.init_calls, " ", UserAnnotationTracked.setter_calls, " ", tracked_obj.label)
 
-func _on_obj(obj: Variant, context: Dictionary) -> void:
+func _on_obj(obj: Variant, target: Object) -> void:
 	var label := ""
 	var extra := ""
 	if obj is UserAnnotation:
 		label = obj.label
 	elif obj is UserAnnotationAlso:
 		extra = str(obj.extra)
-	print("obj ", context["target"], "|", context["member"], "|", context["parameter"], "|", label, "|", extra, "|", obj is GDScriptAnnotation, "|", obj is UserAnnotation)
+	print("obj ", _slot(target), "|", label, "|", extra, "|", obj is GDScriptAnnotation, "|", obj is UserAnnotation, "|", _view(target))
+	if target is VariableInfo and str((target as VariableInfo).name) == "host_value":
+		print("host script ", (target as VariableInfo).gdscript.get_global_name())
 
 func _print_obj(prefix: String, obj: Variant) -> void:
 	var label := ""

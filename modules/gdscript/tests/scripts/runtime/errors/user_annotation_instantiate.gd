@@ -1,7 +1,7 @@
 @warning_ignore_start("unsafe_cast")
 extends RefCounted
 
-func _noop(_ann_name: StringName, _values: Dictionary, _context: Dictionary) -> void:
+func _noop(_ann_name: StringName, _values: Dictionary, _target: Object) -> void:
 	pass
 
 func test() -> void:
