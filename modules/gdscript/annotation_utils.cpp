@@ -406,8 +406,8 @@ void AnnotationUtils::_bind_methods() {
 	ClassDB::bind_static_method(get_class_static(), D_METHOD("get_annotation", "script", "annotation_class", "member", "parameter"), &AnnotationUtils::get_annotation, DEFVAL(StringName()), DEFVAL(StringName()));
 	ClassDB::bind_static_method(get_class_static(), D_METHOD("has_annotation", "script", "annotation_class", "member", "parameter"), &AnnotationUtils::has_annotation, DEFVAL(StringName()), DEFVAL(StringName()));
 	ClassDB::bind_static_method(get_class_static(), D_METHOD("get_annotation_values", "script", "annotation_class", "member", "parameter"), &AnnotationUtils::get_annotation_values, DEFVAL(StringName()), DEFVAL(StringName()));
-	ClassDB::bind_static_method(get_class_static(), D_METHOD("find_annotated", "script", "annotation_class"), &AnnotationUtils::find_annotated);
-	ClassDB::bind_static_method(get_class_static(), D_METHOD("find_annotated_initialized", "script", "annotation_class"), &AnnotationUtils::find_annotated_initialized);
+	ClassDB::bind_static_method(get_class_static(), D_METHOD("find_annotated_elements", "script", "annotation_class"), &AnnotationUtils::find_annotated_elements);
+	ClassDB::bind_static_method(get_class_static(), D_METHOD("find_annotations", "script", "annotation_class"), &AnnotationUtils::find_annotations);
 	ClassDB::bind_static_method(get_class_static(), D_METHOD("for_each_annotation_in_bases_initialized", "annotation_class", "script", "callback"), &AnnotationUtils::for_each_annotation_in_bases_initialized);
 	ClassDB::bind_static_method(get_class_static(), D_METHOD("for_each_annotation_initialized", "annotation_class", "script", "callback"), &AnnotationUtils::for_each_annotation_initialized);
 	ClassDB::bind_static_method(get_class_static(), D_METHOD("get_annotation_initialized", "script", "annotation_class", "member", "parameter"), &AnnotationUtils::get_annotation_initialized, DEFVAL(StringName()), DEFVAL(StringName()));
@@ -540,7 +540,7 @@ Variant AnnotationUtils::get_annotation_values(const Ref<GDScript> &p_script, co
 	return Dictionary(match)["values"];
 }
 
-Array AnnotationUtils::find_annotated(const Ref<GDScript> &p_script, const Variant &p_annotation_class) {
+Array AnnotationUtils::find_annotated_elements(const Ref<GDScript> &p_script, const Variant &p_annotation_class) {
 	ERR_FAIL_COND_V_MSG(p_script.is_null(), Array(), "Annotation script must be a GDScript.");
 	AnnotationClass query;
 	String error;
@@ -613,7 +613,7 @@ Variant AnnotationUtils::get_annotation_initialized(const Ref<GDScript> &p_scrip
 	return instantiate_annotation(entry);
 }
 
-Array AnnotationUtils::find_annotated_initialized(const Ref<GDScript> &p_script, const Variant &p_annotation_class) {
+Array AnnotationUtils::find_annotations(const Ref<GDScript> &p_script, const Variant &p_annotation_class) {
 	ERR_FAIL_COND_V_MSG(p_script.is_null(), Array(), "Annotation script must be a GDScript.");
 	AnnotationClass query;
 	String error;

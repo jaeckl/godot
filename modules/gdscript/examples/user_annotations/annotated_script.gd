@@ -38,7 +38,7 @@
 # read_annotations() walks those rows, reads the health entry, lists every
 # match as a ReflectionUtils view, and instantiates the script-header entry.
 # The _initialized methods return annotation objects. The callback is
-# (annotation, target). find_annotated_initialized returns objects, not views.
+# (annotation, target). find_annotations returns objects, not views.
 # None of this runs from _ready.
 @MyCustomAnnotation(my_dict={"asd": "asda"})
 extends Node
@@ -70,7 +70,7 @@ func read_annotations() -> void:
 	)
 	var field: Dictionary = AnnotationUtils.get_annotation(script, MyCustomAnnotation, &"health")
 	print(field)
-	var found: Array = AnnotationUtils.find_annotated(script, MyCustomAnnotation)
+	var found: Array = AnnotationUtils.find_annotated_elements(script, MyCustomAnnotation)
 	for row in found:
 		if row is VariableInfo:
 			print((row as VariableInfo).name)
@@ -83,5 +83,5 @@ func read_annotations() -> void:
 		if target is VariableInfo:
 			print((target as VariableInfo).name, annotation.my_dict)
 	)
-	print(AnnotationUtils.find_annotated_initialized(script, MyCustomAnnotation).size())
+	print(AnnotationUtils.find_annotations(script, MyCustomAnnotation).size())
 

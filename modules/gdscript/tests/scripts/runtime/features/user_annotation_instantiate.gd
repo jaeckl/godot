@@ -83,7 +83,7 @@ func test() -> void:
 	print("stacked base ", stacked_base["name"])
 	print("stacked exact ", stacked_exact["name"])
 
-	var found: Array = AnnotationUtils.find_annotated(script, UserAnnotationBase)
+	var found: Array = AnnotationUtils.find_annotated_elements(script, UserAnnotationBase)
 	for row in found:
 		print("find ", _slot(row))
 	print("find type ", found[0] is ScriptInfo, " ", found[0] is Dictionary)
@@ -125,8 +125,8 @@ func test() -> void:
 	print("init stacked ", stacked_obj.label, " ", is_same(stacked_obj, stacked_again))
 
 	AnnotationUtils.for_each_annotation_initialized(UserAnnotation, script, _on_obj)
-	var found_obj: Array = AnnotationUtils.find_annotated_initialized(script, UserAnnotationBase)
-	print("init find ", found.size(), " ", found_obj.size(), " ", AnnotationUtils.find_annotated(script, UserAnnotation).size(), " ", AnnotationUtils.find_annotated_initialized(script, UserAnnotation).size())
+	var found_obj: Array = AnnotationUtils.find_annotations(script, UserAnnotationBase)
+	print("init find ", found.size(), " ", found_obj.size(), " ", AnnotationUtils.find_annotated_elements(script, UserAnnotation).size(), " ", AnnotationUtils.find_annotations(script, UserAnnotation).size())
 	for row in found_obj:
 		_print_obj("init row ", row)
 	AnnotationUtils.for_each_annotation_in_bases_initialized(UserAnnotation, UserAnnotationChild, _on_obj)
