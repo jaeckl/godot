@@ -246,6 +246,7 @@ public:
 	bool has_class(const GDScript *p_script);
 	GDScript *get_root_script();
 	bool is_root_script() const { return _owner == nullptr; }
+	GDScript *get_owner_script() const { return _owner; }
 	String get_fully_qualified_name() const { return fully_qualified_name; }
 	const HashMap<StringName, Ref<GDScript>> &get_subclasses() const { return subclasses; }
 	const HashMap<StringName, Variant> &get_constants() const { return constants; }

@@ -1,0 +1,7 @@
+GDTEST_OK
+name UserAnnotationDotted.Inner inner
+script UserAnnotationDotted.Inner
+init inner false
+find 1
+deep UserAnnotationDotted.Mid.Deeper deep
+values deep

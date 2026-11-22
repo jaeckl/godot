@@ -9,4 +9,5 @@ extends GDScriptAnnotation
 # `my_dict` defaults to an empty dictionary when a use does not pass it.
 # `const repeatable := true` would allow another @MyCustomAnnotation on the
 # same target. Without it, a second use is an error. There is no @repeatable.
+# An inner class is @Outer.Inner. This global class_name stays @MyCustomAnnotation.
 var my_dict: Dictionary = {}

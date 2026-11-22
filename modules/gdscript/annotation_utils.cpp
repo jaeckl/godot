@@ -65,7 +65,90 @@ static bool _extends_gdscript_annotation(const GDScript *p_script) {
 	return native == SNAME("GDScriptAnnotation") || ClassDB::is_parent_class(native, SNAME("GDScriptAnnotation"));
 }
 
-static bool _resolve_named_class(const StringName &p_class_name, AnnotationClass &r_out, String &r_error) {
+static String _qualified_script_name(const GDScript *p_script) {
+	Vector<String> parts;
+	const GDScript *current = p_script;
+	while (current != nullptr) {
+		StringName part = current->get_global_name();
+		const bool global = part != StringName();
+		if (!global) {
+			part = current->get_local_name();
+		}
+		if (part == StringName()) {
+			break;
+		}
+		parts.insert(0, String(part));
+		if (global) {
+			break;
+		}
+		current = current->get_owner_script();
+	}
+	return String(".").join(parts);
+}
+
+static bool _walk_annotation_subclasses(const Ref<GDScript> &p_root, const Vector<String> &p_parts, int p_start, Ref<GDScript> &r_script) {
+	Ref<GDScript> current = p_root;
+	for (int i = p_start; i < p_parts.size(); i++) {
+		if (current.is_null()) {
+			return false;
+		}
+		const HashMap<StringName, Ref<GDScript>> &subclasses = current->get_subclasses();
+		HashMap<StringName, Ref<GDScript>>::ConstIterator found = subclasses.find(p_parts[i]);
+		if (!found) {
+			return false;
+		}
+		current = found->value;
+	}
+	if (current.is_null()) {
+		return false;
+	}
+	r_script = current;
+	return true;
+}
+
+static bool _finish_named_script(const Ref<GDScript> &p_script, const String &p_class_name, AnnotationClass &r_out, String &r_error) {
+	if (p_script.is_null() || !p_script->is_script_valid()) {
+		r_error = vformat(R"(Could not parse annotation class "%s".)", p_class_name);
+		return false;
+	}
+	if (!_extends_gdscript_annotation(p_script.ptr())) {
+		r_error = vformat(R"(Annotation class "%s" must extend "GDScriptAnnotation".)", p_class_name);
+		return false;
+	}
+	r_out.script = p_script;
+	r_out.class_name = p_class_name;
+	return true;
+}
+
+static bool _resolve_named_class(const StringName &p_class_name, AnnotationClass &r_out, String &r_error, const GDScript *p_relative = nullptr) {
+	const String full_name = String(p_class_name);
+	if (full_name.contains(".")) {
+		const Vector<String> parts = full_name.split(".");
+		const String first = parts[0];
+		if (ClassDB::class_exists(first) && !ScriptServer::is_global_class(first)) {
+			r_error = vformat(R"(Annotation class "%s" must be a GDScript class.)", full_name);
+			return false;
+		}
+
+		Ref<GDScript> leaf;
+		if (ScriptServer::is_global_class(first)) {
+			if (ScriptServer::get_global_class_language(first) != SNAME("GDScript")) {
+				r_error = vformat(R"(Annotation class "%s" must be a GDScript class.)", full_name);
+				return false;
+			}
+			Error load_error = OK;
+			Ref<GDScript> root = GDScriptCache::get_full_script(ScriptServer::get_global_class_path(first), load_error);
+			if (root.is_null() || load_error != OK || !root->is_script_valid() || !_walk_annotation_subclasses(root, parts, 1, leaf)) {
+				r_error = vformat(R"(Unknown annotation class "%s".)", full_name);
+				return false;
+			}
+		} else if (p_relative == nullptr || !_walk_annotation_subclasses(Ref<GDScript>(p_relative), parts, 0, leaf)) {
+			r_error = vformat(R"(Unknown annotation class "%s".)", full_name);
+			return false;
+		}
+		return _finish_named_script(leaf, full_name, r_out, r_error);
+	}
+
 	if (ClassDB::class_exists(p_class_name) && !ScriptServer::is_global_class(p_class_name)) {
 		r_error = vformat(R"(Annotation class "%s" must be a GDScript class.)", p_class_name);
 		return false;
@@ -85,43 +168,36 @@ static bool _resolve_named_class(const StringName &p_class_name, AnnotationClass
 		r_error = vformat(R"(Could not parse annotation class "%s".)", p_class_name);
 		return false;
 	}
-	if (!_extends_gdscript_annotation(script.ptr())) {
-		r_error = vformat(R"(Annotation class "%s" must extend "GDScriptAnnotation".)", p_class_name);
-		return false;
-	}
-
-	r_out.script = script;
-	r_out.class_name = p_class_name;
-	return true;
+	return _finish_named_script(script, full_name, r_out, r_error);
 }
 
-static bool _resolve_annotation_class(const Variant &p_annotation_class, AnnotationClass &r_out, String &r_error) {
+static bool _resolve_annotation_class(const Variant &p_annotation_class, AnnotationClass &r_out, String &r_error, const GDScript *p_relative = nullptr) {
 	if (p_annotation_class.get_type() == Variant::OBJECT) {
 		GDScript *script = Object::cast_to<GDScript>(p_annotation_class.operator Object *());
 		if (script == nullptr) {
 			r_error = "Annotation class must be a GDScript or a global class name.";
 			return false;
 		}
-		StringName class_name = script->get_global_name();
-		if (class_name == StringName()) {
+		const String qualified = _qualified_script_name(script);
+		if (script->get_global_name() == StringName() && script->get_owner_script() == nullptr) {
 			r_error = "Annotation class must have a class_name.";
 			return false;
 		}
 		if (!script->is_script_valid()) {
-			r_error = vformat(R"(Could not parse annotation class "%s".)", class_name);
+			r_error = vformat(R"(Could not parse annotation class "%s".)", qualified);
 			return false;
 		}
 		if (!_extends_gdscript_annotation(script)) {
-			r_error = vformat(R"(Annotation class "%s" must extend "GDScriptAnnotation".)", class_name);
+			r_error = vformat(R"(Annotation class "%s" must extend "GDScriptAnnotation".)", qualified);
 			return false;
 		}
 		r_out.script = script;
-		r_out.class_name = class_name;
+		r_out.class_name = qualified;
 		return true;
 	}
 
 	if (p_annotation_class.get_type() == Variant::STRING || p_annotation_class.get_type() == Variant::STRING_NAME) {
-		return _resolve_named_class(StringName(p_annotation_class), r_out, r_error);
+		return _resolve_named_class(StringName(p_annotation_class), r_out, r_error, p_relative);
 	}
 
 	r_error = "Annotation class must be a GDScript or a global class name.";
@@ -140,15 +216,27 @@ static bool _annotation_class_matches(const GDScript *p_entry_script, const GDSc
 	return false;
 }
 
-static bool _resolve_entry_class(const StringName &p_class_name, HashMap<StringName, AnnotationClass> &r_cache, AnnotationClass &r_out, String &r_error) {
-	if (AnnotationClass *cached = r_cache.getptr(p_class_name)) {
+static StringName _entry_cache_key(const StringName &p_class_name, const GDScript *p_relative) {
+	if (p_relative == nullptr || !String(p_class_name).contains(".")) {
+		return p_class_name;
+	}
+	const Vector<String> parts = String(p_class_name).split(".");
+	if (ScriptServer::is_global_class(parts[0])) {
+		return p_class_name;
+	}
+	return StringName(itos(p_relative->get_instance_id()) + "::" + String(p_class_name));
+}
+
+static bool _resolve_entry_class(const StringName &p_class_name, const GDScript *p_relative, HashMap<StringName, AnnotationClass> &r_cache, AnnotationClass &r_out, String &r_error) {
+	const StringName cache_key = _entry_cache_key(p_class_name, p_relative);
+	if (AnnotationClass *cached = r_cache.getptr(cache_key)) {
 		r_out = *cached;
 		return true;
 	}
-	if (!_resolve_named_class(p_class_name, r_out, r_error)) {
+	if (!_resolve_named_class(p_class_name, r_out, r_error, p_relative)) {
 		return false;
 	}
-	r_cache.insert(p_class_name, r_out);
+	r_cache.insert(cache_key, r_out);
 	return true;
 }
 
@@ -205,7 +293,7 @@ static bool _each_entries(const Array &p_entries, const GDScript *p_script, Anno
 		Dictionary entry = p_entries[i];
 		StringName entry_name = entry["name"];
 		AnnotationClass entry_class;
-		if (!_resolve_entry_class(entry_name, r_cache, entry_class, r_error)) {
+		if (!_resolve_entry_class(entry_name, p_script, r_cache, entry_class, r_error)) {
 			return false;
 		}
 		if (!_annotation_class_matches(entry_class.script.ptr(), p_query)) {
@@ -379,12 +467,12 @@ static bool _entries_for_target(const Dictionary &p_annotations, const StringNam
 	return true;
 }
 
-static Variant _first_match(const Array &p_entries, const GDScript *p_query, HashMap<StringName, AnnotationClass> &r_cache, String &r_error) {
+static Variant _first_match(const Array &p_entries, const GDScript *p_owner, const GDScript *p_query, HashMap<StringName, AnnotationClass> &r_cache, String &r_error) {
 	for (int i = 0; i < p_entries.size(); i++) {
 		Dictionary entry = p_entries[i];
 		StringName entry_name = entry["name"];
 		AnnotationClass entry_class;
-		if (!_resolve_entry_class(entry_name, r_cache, entry_class, r_error)) {
+		if (!_resolve_entry_class(entry_name, p_owner, r_cache, entry_class, r_error)) {
 			return Variant();
 		}
 		if (!_annotation_class_matches(entry_class.script.ptr(), p_query)) {
@@ -473,7 +561,7 @@ void AnnotationUtils::for_each_annotation(const Variant &p_annotation_class, con
 	ERR_FAIL_COND_MSG(p_script.is_null(), "Annotation script must be a GDScript.");
 	AnnotationClass query;
 	String error;
-	if (!_resolve_annotation_class(p_annotation_class, query, error)) {
+	if (!_resolve_annotation_class(p_annotation_class, query, error, p_script.ptr())) {
 		ERR_FAIL_MSG(error);
 	}
 	Callable callback;
@@ -490,7 +578,7 @@ void AnnotationUtils::for_each_annotation_in_bases(const Variant &p_annotation_c
 	ERR_FAIL_COND_MSG(p_script.is_null(), "Annotation script must be a GDScript.");
 	AnnotationClass query;
 	String error;
-	if (!_resolve_annotation_class(p_annotation_class, query, error)) {
+	if (!_resolve_annotation_class(p_annotation_class, query, error, p_script.ptr())) {
 		ERR_FAIL_MSG(error);
 	}
 	Callable callback;
@@ -512,7 +600,7 @@ Variant AnnotationUtils::get_annotation(const Ref<GDScript> &p_script, const Var
 	ERR_FAIL_COND_V_MSG(p_script.is_null(), Variant(), "Annotation script must be a GDScript.");
 	AnnotationClass query;
 	String error;
-	if (!_resolve_annotation_class(p_annotation_class, query, error)) {
+	if (!_resolve_annotation_class(p_annotation_class, query, error, p_script.ptr())) {
 		ERR_FAIL_V_MSG(Variant(), error);
 	}
 	Array entries;
@@ -520,7 +608,7 @@ Variant AnnotationUtils::get_annotation(const Ref<GDScript> &p_script, const Var
 		ERR_FAIL_V_MSG(Variant(), error);
 	}
 	HashMap<StringName, AnnotationClass> cache;
-	Variant match = _first_match(entries, query.script.ptr(), cache, error);
+	Variant match = _first_match(entries, p_script.ptr(), query.script.ptr(), cache, error);
 	if (!error.is_empty()) {
 		ERR_FAIL_V_MSG(Variant(), error);
 	}
@@ -544,7 +632,7 @@ Array AnnotationUtils::find_annotated_elements(const Ref<GDScript> &p_script, co
 	ERR_FAIL_COND_V_MSG(p_script.is_null(), Array(), "Annotation script must be a GDScript.");
 	AnnotationClass query;
 	String error;
-	if (!_resolve_annotation_class(p_annotation_class, query, error)) {
+	if (!_resolve_annotation_class(p_annotation_class, query, error, p_script.ptr())) {
 		ERR_FAIL_V_MSG(Array(), error);
 	}
 
@@ -570,7 +658,7 @@ void AnnotationUtils::for_each_annotation_initialized(const Variant &p_annotatio
 	ERR_FAIL_COND_MSG(p_script.is_null(), "Annotation script must be a GDScript.");
 	AnnotationClass query;
 	String error;
-	if (!_resolve_annotation_class(p_annotation_class, query, error)) {
+	if (!_resolve_annotation_class(p_annotation_class, query, error, p_script.ptr())) {
 		ERR_FAIL_MSG(error);
 	}
 	Callable callback;
@@ -587,7 +675,7 @@ void AnnotationUtils::for_each_annotation_in_bases_initialized(const Variant &p_
 	ERR_FAIL_COND_MSG(p_script.is_null(), "Annotation script must be a GDScript.");
 	AnnotationClass query;
 	String error;
-	if (!_resolve_annotation_class(p_annotation_class, query, error)) {
+	if (!_resolve_annotation_class(p_annotation_class, query, error, p_script.ptr())) {
 		ERR_FAIL_MSG(error);
 	}
 	Callable callback;
@@ -617,7 +705,7 @@ Array AnnotationUtils::find_annotations(const Ref<GDScript> &p_script, const Var
 	ERR_FAIL_COND_V_MSG(p_script.is_null(), Array(), "Annotation script must be a GDScript.");
 	AnnotationClass query;
 	String error;
-	if (!_resolve_annotation_class(p_annotation_class, query, error)) {
+	if (!_resolve_annotation_class(p_annotation_class, query, error, p_script.ptr())) {
 		ERR_FAIL_V_MSG(Array(), error);
 	}
 

@@ -6,7 +6,7 @@
 	<description>
 		Looks up annotations stored by [method GDScript.get_annotations] and, when asked, builds an object from one entry.
 		Nothing in this class runs when a script loads. [method instantiate_annotation] allocates a [RefCounted], attaches the annotation script, and copies attribute values into the member store. It does not call [code]_init[/code] or setters. The [code]_initialized[/code] methods do that only for the matches they return.
-		A query matches the requested annotation class and any annotation class that extends it. The entry name stays the class that was applied. [method for_each_annotation] reads one script. [method for_each_annotation_in_bases] reads that script's base scripts, nearest first, and does not include the script itself. [method has_annotation] stays a dictionary check and does not construct. Walk callbacks and [method find_annotated_elements] return the [ReflectionUtils] views ([ScriptInfo], [VariableInfo], [FunctionInfo], [ParameterInfo]).
+		A query matches the requested annotation class and any annotation class that extends it. The entry name stays the class that was applied. A single name is a global [code]class_name[/code]. A dotted name, such as [code]Outer.Inner[/code], is that qualified class, including an inner class. [method for_each_annotation] reads one script. [method for_each_annotation_in_bases] reads that script's base scripts, nearest first, and does not include the script itself. [method has_annotation] stays a dictionary check and does not construct. Walk callbacks and [method find_annotated_elements] return the [ReflectionUtils] views ([ScriptInfo], [VariableInfo], [FunctionInfo], [ParameterInfo]).
 	</description>
 	<methods>
 		<method name="find_annotated_elements" qualifiers="static">

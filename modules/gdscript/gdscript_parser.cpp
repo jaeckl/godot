@@ -1898,6 +1898,15 @@ GDScriptParser::AnnotationNode *GDScriptParser::parse_annotation(uint32_t p_vali
 		}
 	} else {
 		annotation->is_user = true;
+		// Dots belong to the annotation name only. Built-in names stay one identifier.
+		while (check(GDScriptTokenizer::Token::PERIOD)) {
+			advance();
+			if (!consume(GDScriptTokenizer::Token::IDENTIFIER, R"(Expected identifier after "." in annotation name.)")) {
+				valid = false;
+				break;
+			}
+			annotation->name = StringName(String(annotation->name) + "." + String(previous.literal));
+		}
 		if (!annotation->applies_to(p_valid_targets)) {
 			push_error(vformat(R"(Annotation "%s" is not allowed in this level.)", annotation->name));
 			valid = false;
