@@ -174,7 +174,20 @@ static bool _call_annotation_callback(const Callable &p_callback, const StringNa
 	return true;
 }
 
-static bool _each_entries(const Array &p_entries, const StringName &p_target, const StringName &p_member, const StringName &p_parameter, const GDScript *p_query, const Callable *p_callback, Array *r_found, HashMap<StringName, AnnotationClass> &r_cache, String &r_error) {
+static bool _call_initialized_callback(const Callable &p_callback, const Variant &p_object, const Dictionary &p_context, String &r_error) {
+	const Variant context = p_context;
+	const Variant *args[2] = { &p_object, &context };
+	Callable::CallError call_error;
+	Variant return_value;
+	p_callback.callp(args, 2, return_value, call_error);
+	if (call_error.error != Callable::CallError::CALL_OK) {
+		r_error = Variant::get_call_error_text("for_each_annotation_initialized", args, 2, call_error);
+		return false;
+	}
+	return true;
+}
+
+static bool _each_entries(const Array &p_entries, const StringName &p_target, const StringName &p_member, const StringName &p_parameter, const GDScript *p_query, const Callable *p_callback, Array *r_found, bool p_instantiate, HashMap<StringName, AnnotationClass> &r_cache, String &r_error) {
 	for (int i = 0; i < p_entries.size(); i++) {
 		Dictionary entry = p_entries[i];
 		StringName entry_name = entry["name"];
@@ -186,10 +199,29 @@ static bool _each_entries(const Array &p_entries, const StringName &p_target, co
 			continue;
 		}
 		Dictionary context = _context(p_target, p_member, p_parameter);
-		if (r_found != nullptr) {
-			r_found->push_back(context);
+		Variant object;
+		if (p_instantiate) {
+			Dictionary entry_copy;
+			entry_copy["name"] = entry_name;
+			entry_copy["values"] = entry["values"];
+			object = AnnotationUtils::instantiate_annotation(entry_copy);
+			if (object.get_type() != Variant::OBJECT) {
+				// instantiate_annotation already reported the failure.
+				r_error = String();
+				return false;
+			}
 		}
-		if (p_callback != nullptr && !_call_annotation_callback(*p_callback, entry_name, entry["values"], context, r_error)) {
+		if (r_found != nullptr) {
+			r_found->push_back(p_instantiate ? object : Variant(context));
+		}
+		if (p_callback == nullptr) {
+			continue;
+		}
+		if (p_instantiate) {
+			if (!_call_initialized_callback(*p_callback, object, context, r_error)) {
+				return false;
+			}
+		} else if (!_call_annotation_callback(*p_callback, entry_name, entry["values"], context, r_error)) {
 			return false;
 		}
 	}
@@ -204,13 +236,13 @@ static bool _as_array(const Variant &p_value, Array &r_array) {
 	return true;
 }
 
-static bool _walk_script(const GDScript *p_script, const GDScript *p_query, const Callable *p_callback, Array *r_found, HashMap<StringName, AnnotationClass> &r_cache, String &r_error) {
+static bool _walk_script(const GDScript *p_script, const GDScript *p_query, const Callable *p_callback, Array *r_found, bool p_instantiate, HashMap<StringName, AnnotationClass> &r_cache, String &r_error) {
 	const Dictionary annotations = p_script->get_annotations();
 
 	if (annotations.has("script")) {
 		Array entries;
 		if (_as_array(annotations["script"], entries)) {
-			if (!_each_entries(entries, "script", StringName(), StringName(), p_query, p_callback, r_found, r_cache, r_error)) {
+			if (!_each_entries(entries, "script", StringName(), StringName(), p_query, p_callback, r_found, p_instantiate, r_cache, r_error)) {
 				return false;
 			}
 		}
@@ -225,7 +257,7 @@ static bool _walk_script(const GDScript *p_script, const GDScript *p_query, cons
 			if (!_as_array(variables[member], entries)) {
 				continue;
 			}
-			if (!_each_entries(entries, "variable", member, StringName(), p_query, p_callback, r_found, r_cache, r_error)) {
+			if (!_each_entries(entries, "variable", member, StringName(), p_query, p_callback, r_found, p_instantiate, r_cache, r_error)) {
 				return false;
 			}
 		}
@@ -240,7 +272,7 @@ static bool _walk_script(const GDScript *p_script, const GDScript *p_query, cons
 			if (!_as_array(functions[member], entries)) {
 				continue;
 			}
-			if (!_each_entries(entries, "function", member, StringName(), p_query, p_callback, r_found, r_cache, r_error)) {
+			if (!_each_entries(entries, "function", member, StringName(), p_query, p_callback, r_found, p_instantiate, r_cache, r_error)) {
 				return false;
 			}
 		}
@@ -259,7 +291,7 @@ static bool _walk_script(const GDScript *p_script, const GDScript *p_query, cons
 				if (!_as_array(parameter_map[parameter], entries)) {
 					continue;
 				}
-				if (!_each_entries(entries, "parameter", function_name, parameter, p_query, p_callback, r_found, r_cache, r_error)) {
+				if (!_each_entries(entries, "parameter", function_name, parameter, p_query, p_callback, r_found, p_instantiate, r_cache, r_error)) {
 					return false;
 				}
 			}
@@ -354,6 +386,10 @@ void AnnotationUtils::_bind_methods() {
 	ClassDB::bind_static_method(get_class_static(), D_METHOD("has_annotation", "script", "annotation_class", "member", "parameter"), &AnnotationUtils::has_annotation, DEFVAL(StringName()), DEFVAL(StringName()));
 	ClassDB::bind_static_method(get_class_static(), D_METHOD("get_annotation_values", "script", "annotation_class", "member", "parameter"), &AnnotationUtils::get_annotation_values, DEFVAL(StringName()), DEFVAL(StringName()));
 	ClassDB::bind_static_method(get_class_static(), D_METHOD("find_annotated", "script", "annotation_class"), &AnnotationUtils::find_annotated);
+	ClassDB::bind_static_method(get_class_static(), D_METHOD("find_annotated_initialized", "script", "annotation_class"), &AnnotationUtils::find_annotated_initialized);
+	ClassDB::bind_static_method(get_class_static(), D_METHOD("for_each_annotation_in_bases_initialized", "annotation_class", "script", "callback"), &AnnotationUtils::for_each_annotation_in_bases_initialized);
+	ClassDB::bind_static_method(get_class_static(), D_METHOD("for_each_annotation_initialized", "annotation_class", "script", "callback"), &AnnotationUtils::for_each_annotation_initialized);
+	ClassDB::bind_static_method(get_class_static(), D_METHOD("get_annotation_initialized", "script", "annotation_class", "member", "parameter"), &AnnotationUtils::get_annotation_initialized, DEFVAL(StringName()), DEFVAL(StringName()));
 }
 
 Variant AnnotationUtils::instantiate_annotation(const Variant &p_entry) {
@@ -424,7 +460,7 @@ void AnnotationUtils::for_each_annotation(const Variant &p_annotation_class, con
 		ERR_FAIL_MSG(error);
 	}
 	HashMap<StringName, AnnotationClass> cache;
-	if (!_walk_script(p_script.ptr(), query.script.ptr(), &callback, nullptr, cache, error)) {
+	if (!_walk_script(p_script.ptr(), query.script.ptr(), &callback, nullptr, false, cache, error)) {
 		ERR_FAIL_MSG(error);
 	}
 }
@@ -444,7 +480,7 @@ void AnnotationUtils::for_each_annotation_in_bases(const Variant &p_annotation_c
 	HashMap<StringName, AnnotationClass> cache;
 	Ref<GDScript> base = p_script->get_base();
 	while (base.is_valid()) {
-		if (!_walk_script(base.ptr(), query.script.ptr(), &callback, nullptr, cache, error)) {
+		if (!_walk_script(base.ptr(), query.script.ptr(), &callback, nullptr, false, cache, error)) {
 			ERR_FAIL_MSG(error);
 		}
 		base = base->get_base();
@@ -493,8 +529,84 @@ Array AnnotationUtils::find_annotated(const Ref<GDScript> &p_script, const Varia
 
 	Array found;
 	HashMap<StringName, AnnotationClass> cache;
-	if (!_walk_script(p_script.ptr(), query.script.ptr(), nullptr, &found, cache, error)) {
+	if (!_walk_script(p_script.ptr(), query.script.ptr(), nullptr, &found, false, cache, error)) {
 		ERR_FAIL_V_MSG(Array(), error);
+	}
+	return found;
+}
+
+static bool _finish_initialized_walk(bool p_ok, const String &p_error) {
+	if (p_ok) {
+		return true;
+	}
+	if (!p_error.is_empty()) {
+		ERR_FAIL_V_MSG(false, p_error);
+	}
+	return false;
+}
+
+void AnnotationUtils::for_each_annotation_initialized(const Variant &p_annotation_class, const Ref<GDScript> &p_script, const Variant &p_callback) {
+	ERR_FAIL_COND_MSG(p_script.is_null(), "Annotation script must be a GDScript.");
+	AnnotationClass query;
+	String error;
+	if (!_resolve_annotation_class(p_annotation_class, query, error)) {
+		ERR_FAIL_MSG(error);
+	}
+	Callable callback;
+	if (!_prepare_callback(p_callback, callback, error)) {
+		ERR_FAIL_MSG(error);
+	}
+	HashMap<StringName, AnnotationClass> cache;
+	if (!_finish_initialized_walk(_walk_script(p_script.ptr(), query.script.ptr(), &callback, nullptr, true, cache, error), error)) {
+		return;
+	}
+}
+
+void AnnotationUtils::for_each_annotation_in_bases_initialized(const Variant &p_annotation_class, const Ref<GDScript> &p_script, const Variant &p_callback) {
+	ERR_FAIL_COND_MSG(p_script.is_null(), "Annotation script must be a GDScript.");
+	AnnotationClass query;
+	String error;
+	if (!_resolve_annotation_class(p_annotation_class, query, error)) {
+		ERR_FAIL_MSG(error);
+	}
+	Callable callback;
+	if (!_prepare_callback(p_callback, callback, error)) {
+		ERR_FAIL_MSG(error);
+	}
+
+	HashMap<StringName, AnnotationClass> cache;
+	Ref<GDScript> base = p_script->get_base();
+	while (base.is_valid()) {
+		if (!_finish_initialized_walk(_walk_script(base.ptr(), query.script.ptr(), &callback, nullptr, true, cache, error), error)) {
+			return;
+		}
+		base = base->get_base();
+	}
+}
+
+Variant AnnotationUtils::get_annotation_initialized(const Ref<GDScript> &p_script, const Variant &p_annotation_class, const StringName &p_member, const StringName &p_parameter) {
+	Variant entry = get_annotation(p_script, p_annotation_class, p_member, p_parameter);
+	if (entry.get_type() != Variant::DICTIONARY) {
+		return Variant();
+	}
+	return instantiate_annotation(entry);
+}
+
+Array AnnotationUtils::find_annotated_initialized(const Ref<GDScript> &p_script, const Variant &p_annotation_class) {
+	ERR_FAIL_COND_V_MSG(p_script.is_null(), Array(), "Annotation script must be a GDScript.");
+	AnnotationClass query;
+	String error;
+	if (!_resolve_annotation_class(p_annotation_class, query, error)) {
+		ERR_FAIL_V_MSG(Array(), error);
+	}
+
+	Array found;
+	HashMap<StringName, AnnotationClass> cache;
+	if (!_walk_script(p_script.ptr(), query.script.ptr(), nullptr, &found, true, cache, error)) {
+		if (!error.is_empty()) {
+			ERR_FAIL_V_MSG(Array(), error);
+		}
+		return Array();
 	}
 	return found;
 }

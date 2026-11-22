@@ -46,9 +46,13 @@ protected:
 public:
 	static Variant instantiate_annotation(const Variant &p_entry);
 	static void for_each_annotation(const Variant &p_annotation_class, const Ref<GDScript> &p_script, const Variant &p_callback);
+	static void for_each_annotation_initialized(const Variant &p_annotation_class, const Ref<GDScript> &p_script, const Variant &p_callback);
 	static void for_each_annotation_in_bases(const Variant &p_annotation_class, const Ref<GDScript> &p_script, const Variant &p_callback);
+	static void for_each_annotation_in_bases_initialized(const Variant &p_annotation_class, const Ref<GDScript> &p_script, const Variant &p_callback);
 	static Variant get_annotation(const Ref<GDScript> &p_script, const Variant &p_annotation_class, const StringName &p_member = StringName(), const StringName &p_parameter = StringName());
+	static Variant get_annotation_initialized(const Ref<GDScript> &p_script, const Variant &p_annotation_class, const StringName &p_member = StringName(), const StringName &p_parameter = StringName());
 	static bool has_annotation(const Ref<GDScript> &p_script, const Variant &p_annotation_class, const StringName &p_member = StringName(), const StringName &p_parameter = StringName());
 	static Variant get_annotation_values(const Ref<GDScript> &p_script, const Variant &p_annotation_class, const StringName &p_member = StringName(), const StringName &p_parameter = StringName());
 	static Array find_annotated(const Ref<GDScript> &p_script, const Variant &p_annotation_class);
+	static Array find_annotated_initialized(const Ref<GDScript> &p_script, const Variant &p_annotation_class);
 };
