@@ -7042,6 +7042,32 @@ bool GDScriptAnalyzer::_coerce_annotation_value(const GDScriptParser::DataType &
 	return true;
 }
 
+void GDScriptAnalyzer::_reduce_global_class_annotation_value(GDScriptParser::ExpressionNode *p_expression) {
+	if (p_expression == nullptr) {
+		return;
+	}
+	if (p_expression->type == GDScriptParser::Node::ARRAY) {
+		GDScriptParser::ArrayNode *array = static_cast<GDScriptParser::ArrayNode *>(p_expression);
+		for (uint32_t i = 0; i < array->elements.size(); i++) {
+			_reduce_global_class_annotation_value(array->elements[i]);
+		}
+		return;
+	}
+	if (p_expression->type != GDScriptParser::Node::IDENTIFIER) {
+		return;
+	}
+	GDScriptParser::IdentifierNode *identifier = static_cast<GDScriptParser::IdentifierNode *>(p_expression);
+	if (!ScriptServer::is_global_class(identifier->name)) {
+		return;
+	}
+	Ref<Resource> script = ResourceLoader::load(ScriptServer::get_global_class_path(identifier->name));
+	if (script.is_null()) {
+		return;
+	}
+	identifier->is_constant = true;
+	identifier->reduced_value = script;
+}
+
 bool GDScriptAnalyzer::_fold_annotation_argument(GDScriptParser::ExpressionNode *p_expression, const GDScriptParser::DataType &p_type, Variant &r_value, const String &p_annotation_name, const String &p_attribute_label) {
 	if (p_expression == nullptr) {
 		push_error(vformat(R"(Argument %s of annotation "%s" isn't a constant expression.)", p_attribute_label, p_annotation_name));
@@ -7049,6 +7075,9 @@ bool GDScriptAnalyzer::_fold_annotation_argument(GDScriptParser::ExpressionNode 
 	}
 
 	reduce_expression(p_expression);
+	// A global class is a type, not a value. An annotation list such as
+	// [OnTownMusic, OnGameClock] still needs each name to fold to its script.
+	_reduce_global_class_annotation_value(p_expression);
 	bool reduced = false;
 	Variant value = make_expression_reduced_value(p_expression, reduced);
 	if (!reduced) {

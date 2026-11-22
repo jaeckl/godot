@@ -96,6 +96,7 @@ class GDScriptAnalyzer {
 	GDScriptParser::ClassNode *_find_annotation_class(const StringName &p_class_name, GDScriptParser::ClassNode *p_current, const GDScriptParser::Node *p_source);
 	GDScriptParser::ClassNode *_find_dotted_annotation_class(const String &p_class_name, GDScriptParser::ClassNode *p_current, const GDScriptParser::Node *p_source);
 	bool _coerce_annotation_value(const GDScriptParser::DataType &p_type, Variant &r_value, const GDScriptParser::Node *p_source, const String &p_annotation_name, const String &p_attribute_name);
+	void _reduce_global_class_annotation_value(GDScriptParser::ExpressionNode *p_expression);
 	bool _fold_annotation_argument(GDScriptParser::ExpressionNode *p_expression, const GDScriptParser::DataType &p_type, Variant &r_value, const String &p_annotation_name, const String &p_attribute_label);
 	void _resolve_user_annotation(GDScriptParser::AnnotationNode *p_annotation, GDScriptParser::ClassNode *p_current, HashSet<StringName> &r_seen);
 	void _resolve_user_annotation_list(const List<GDScriptParser::AnnotationNode *> &p_annotations, GDScriptParser::ClassNode *p_current);
