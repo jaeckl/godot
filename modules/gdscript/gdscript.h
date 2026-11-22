@@ -73,6 +73,7 @@ class GDScript : public Script {
 	friend class GDScriptFunction;
 	friend class GDScriptAnalyzer;
 	friend class GDScriptCompiler;
+	friend class AnnotationUtils;
 	friend class GDScriptDocGen;
 	friend class GDScriptLambdaCallable;
 	friend class GDScriptLambdaSelfCallable;
@@ -186,6 +187,8 @@ private:
 	GDScriptFunction *_super_constructor(GDScript *p_script);
 	void _super_implicit_constructor(GDScript *p_script, GDScriptInstance *p_instance, Callable::CallError &r_error);
 	GDScriptInstance *_create_instance(const Variant **p_args, int p_argcount, Object *p_owner, Callable::CallError &r_error);
+	// Attaches this script to an existing object without running the implicit initializer or `_init`.
+	GDScriptInstance *_create_annotation_instance(Object *p_owner);
 
 	String _get_debug_path() const;
 
@@ -345,6 +348,7 @@ class GDScriptInstance : public ScriptInstance {
 	friend class GDScriptLambdaCallable;
 	friend class GDScriptLambdaSelfCallable;
 	friend class GDScriptCompiler;
+	friend class AnnotationUtils;
 	friend class GDScriptCache;
 	friend struct GDScriptUtilityFunctionsDefinitions;
 
@@ -359,6 +363,7 @@ class GDScriptInstance : public ScriptInstance {
 	SelfList<GDScriptInstance> script_instance_list; // Linked list of instances with the same script.
 
 	void _call_implicit_ready_recursively(GDScript *p_script);
+	void write_member_raw(int p_index, const Variant &p_value);
 
 public:
 	virtual Object *get_owner() override { return owner; }

@@ -25,7 +25,7 @@
 					"parameters": {}, # Function name to a dictionary of parameter name to an array of entries.
 				}
 				[/codeblock]
-				Each entry is [code]{ "name": StringName, "values": Dictionary }[/code]. [code]name[/code] is the annotation class's [code]class_name[/code]. [code]values[/code] holds the folded attribute values, including defaults. Annotations written on a base script stay on that script.
+				Each entry is [code]{ "name": StringName, "values": Dictionary }[/code]. [code]name[/code] is the annotation class's [code]class_name[/code]. [code]values[/code] holds the folded attribute values, including defaults. Annotations written on a base script stay on that script. This method does not construct annotation objects; [method AnnotationUtils.instantiate_annotation] does.
 			</description>
 		</method>
 		<method name="new" qualifiers="vararg">

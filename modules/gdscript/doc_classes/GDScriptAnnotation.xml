@@ -12,6 +12,7 @@
 		var my_dict: Dictionary = {}
 		[/codeblock]
 		A use such as [code]@MyCustomAnnotation(my_dict={"asd": "asda"})[/code] stores the folded attribute values on the compiled script. Read them with [method GDScript.get_annotations]. Applying an annotation does not construct [GDScriptAnnotation], and [code]_init[/code] is not called.
+		The engine does not [ClassDB] instantiate this native class. [method AnnotationUtils.instantiate_annotation] builds a [RefCounted], attaches the annotation script, copies attributes into the member store, and does not call [code]_init[/code] or setters.
 		Only a global [code]class_name[/code] that extends this class can be used as an annotation. The class cannot be abstract. [GDScriptAnnotation] itself is not a valid annotation.
 	</description>
 </class>

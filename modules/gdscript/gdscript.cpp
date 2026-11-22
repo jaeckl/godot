@@ -199,6 +199,23 @@ GDScriptInstance *GDScript::_create_instance(const Variant **p_args, int p_argco
 	return instance;
 }
 
+GDScriptInstance *GDScript::_create_annotation_instance(Object *p_owner) {
+	ERR_FAIL_NULL_V(p_owner, nullptr);
+
+	GDScriptInstance *instance = memnew(GDScriptInstance);
+	instance->members.resize(member_indices.size());
+	instance->script = Ref<GDScript>(this);
+	instance->owner = p_owner;
+	instance->owner_id = p_owner->get_instance_id();
+	instance->owner->set_script_instance(instance);
+
+	{
+		MutexLock lock(GDScriptLanguage::singleton->mutex);
+		instances.add(&instance->script_instance_list);
+	}
+	return instance;
+}
+
 Variant GDScript::_new(const Variant **p_args, int p_argcount, Callable::CallError &r_error) {
 	/* STEP 1, CREATE */
 
@@ -2078,6 +2095,10 @@ void GDScriptInstance::reload_members() {
 	members = std::move(new_members);
 
 #endif
+}
+
+void GDScriptInstance::write_member_raw(int p_index, const Variant &p_value) {
+	members[p_index] = p_value;
 }
 
 GDScriptInstance::~GDScriptInstance() {

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="AnnotationUtils" inherits="Object" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Read-time helpers for user GDScript annotations.
+	</brief_description>
+	<description>
+		Looks up annotations stored by [method GDScript.get_annotations] and, when asked, builds an object from one entry.
+		Nothing in this class runs when a script loads. [method instantiate_annotation] allocates a [RefCounted], attaches the annotation script, and copies attribute values into the member store. It does not call [code]_init[/code] or setters.
+		A query matches the requested annotation class and any annotation class that extends it. The entry name stays the class that was applied. [method for_each_annotation] reads one script. [method for_each_annotation_in_bases] reads that script's base scripts, nearest first, and does not include the script itself.
+	</description>
+	<methods>
+		<method name="find_annotated" qualifiers="static">
+			<return type="Array" />
+			<param index="0" name="script" type="GDScript" />
+			<param index="1" name="annotation_class" type="Variant" />
+			<description>
+				Returns one context dictionary per match on [param script], in source order. Each dictionary has [code]target[/code], [code]member[/code], and [code]parameter[/code]. [code]target[/code] is [code]script[/code], [code]variable[/code], [code]function[/code], or [code]parameter[/code].
+			</description>
+		</method>
+		<method name="for_each_annotation" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="annotation_class" type="Variant" />
+			<param index="1" name="script" type="GDScript" />
+			<param index="2" name="callback" type="Callable" />
+			<description>
+				Calls [param callback] once per match on [param script]. The callback receives the applied class name, the folded values dictionary, and a context dictionary with [code]target[/code], [code]member[/code], and [code]parameter[/code].
+			</description>
+		</method>
+		<method name="for_each_annotation_in_bases" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="annotation_class" type="Variant" />
+			<param index="1" name="script" type="GDScript" />
+			<param index="2" name="callback" type="Callable" />
+			<description>
+				Same callback as [method for_each_annotation], walking [method GDScript.get_base_script] from the nearest base upward. Does not visit [param script] itself.
+			</description>
+		</method>
+		<method name="get_annotation" qualifiers="static">
+			<return type="Variant" />
+			<param index="0" name="script" type="GDScript" />
+			<param index="1" name="annotation_class" type="Variant" />
+			<param index="2" name="member" type="StringName" default="&amp;&quot;&quot;" />
+			<param index="3" name="parameter" type="StringName" default="&amp;&quot;&quot;" />
+			<description>
+				Returns the first matching entry, or [code]null[/code]. An empty [param member] and [param parameter] select the script header only. The entry is [code]{ "name": StringName, "values": Dictionary }[/code]. [code]name[/code] is the applied class.
+			</description>
+		</method>
+		<method name="get_annotation_values" qualifiers="static">
+			<return type="Variant" />
+			<param index="0" name="script" type="GDScript" />
+			<param index="1" name="annotation_class" type="Variant" />
+			<param index="2" name="member" type="StringName" default="&amp;&quot;&quot;" />
+			<param index="3" name="parameter" type="StringName" default="&amp;&quot;&quot;" />
+			<description>
+				Returns the folded values dictionary of the first match, or [code]null[/code]. Same target rules as [method get_annotation].
+			</description>
+		</method>
+		<method name="has_annotation" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="script" type="GDScript" />
+			<param index="1" name="annotation_class" type="Variant" />
+			<param index="2" name="member" type="StringName" default="&amp;&quot;&quot;" />
+			<param index="3" name="parameter" type="StringName" default="&amp;&quot;&quot;" />
+			<description>
+				Returns [code]true[/code] when [method get_annotation] would return an entry. An empty [param member] checks the script header only.
+			</description>
+		</method>
+		<method name="instantiate_annotation" qualifiers="static">
+			<return type="Variant" />
+			<param index="0" name="entry" type="Variant" />
+			<description>
+				Builds a new [RefCounted] for one [method GDScript.get_annotations] entry and returns it. The object's script is the annotation class named by the entry. Array and dictionary attributes are mutable copies. The stored bag stays read-only.
+			</description>
+		</method>
+	</methods>
+</class>
